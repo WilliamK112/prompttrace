@@ -13,7 +13,8 @@
     "traces": "node dist/index.js traces --range 7d --limit 50",
     "failures": "node dist/index.js failures --range 7d",
     "export": "node dist/index.js export --format md --range 7d",
-    "dashboard": "node dist/index.js dashboard --port 4310"
+    "dashboard": "node dist/index.js dashboard --port 4310",
+    "openclaw": "node dist/index.js openclaw --endpoint openclaw.tool.exec --"
   },
   "keywords": ["llm", "observability", "trace", "gemini", "openai"],
   "license": "MIT",

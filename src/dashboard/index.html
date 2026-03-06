@@ -31,12 +31,6 @@
 
   <div class="row" id="kpis"></div>
 
-  <h2>Overview</h2>
-  <div class="card"><pre id="overview" class="mono"></pre></div>
-
-  <h2>Failures</h2>
-  <div class="card"><pre id="failures" class="mono"></pre></div>
-
   <h2>Traces</h2>
   <div class="card">
     <div>
@@ -53,6 +47,15 @@
       <tbody id="traceRows"></tbody>
     </table>
   </div>
+
+  <h2>Overview</h2>
+  <div class="card"><pre id="overview" class="mono"></pre></div>
+
+  <h2>Failures</h2>
+  <div class="card"><pre id="failures" class="mono"></pre></div>
+
+  <h2>OpenClaw Usage</h2>
+  <div class="card"><pre id="openclaw" class="mono"></pre></div>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -78,6 +81,12 @@
       $('failures').textContent = JSON.stringify(f, null, 2);
     }
 
+    async function loadOpenClaw() {
+      const range = $('range').value;
+      const o = await (await fetch(`/api/openclaw?range=${range}`)).json();
+      $('openclaw').textContent = JSON.stringify(o, null, 2);
+    }
+
     async function loadTraces() {
       const range = $('range').value;
       const q = new URLSearchParams({ range, limit: '100' });
@@ -98,7 +107,7 @@
       </tr>`).join('');
     }
 
-    async function loadAll() { await loadOverview(); await loadFailures(); await loadTraces(); }
+    async function loadAll() { await loadOverview(); await loadFailures(); await loadOpenClaw(); await loadTraces(); }
     loadAll();
   </script>
 </body>

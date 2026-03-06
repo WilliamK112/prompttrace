@@ -5,6 +5,7 @@ import { analyzeTraceFile } from '../aggregator/analyze.js';
 import { failureSummary, listTraces } from '../aggregator/traces.js';
 import { parseRangeDays } from '../aggregator/load.js';
 import { appendTrace } from '../collector/jsonl.js';
+import { openclawSummary } from '../aggregator/openclaw.js';
 
 function writeCors(res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -55,6 +56,11 @@ export function startDashboard(port = 4310) {
     if (url.pathname === '/api/overview') {
       const rangeDays = parseRangeDays(url.searchParams.get('range') || '7d');
       return sendJson(res, analyzeTraceFile('.prompttrace/traces.jsonl', rangeDays));
+    }
+
+    if (url.pathname === '/api/openclaw') {
+      const rangeDays = parseRangeDays(url.searchParams.get('range') || '7d');
+      return sendJson(res, openclawSummary('.prompttrace/traces.jsonl', rangeDays));
     }
 
     if (url.pathname === '/api/traces') {

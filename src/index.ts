@@ -4,6 +4,7 @@ import { parseRangeDays } from './aggregator/load.js';
 import { listTraces, failureSummary } from './aggregator/traces.js';
 import { exportJson, exportMarkdown } from './cli/export.js';
 import { startDashboard } from './cli/dashboard.js';
+import { runAndTraceOpenClaw } from './cli/openclaw.js';
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'analyze';
@@ -43,6 +44,14 @@ if (cmd === 'analyze') {
   }
 } else if (cmd === 'dashboard') {
   startDashboard(Number(getArg('--port', '4310')));
+} else if (cmd === 'openclaw') {
+  const sep = args.indexOf('--');
+  const command = sep >= 0 ? args.slice(sep + 1) : [];
+  const endpoint = getArg('--endpoint', 'openclaw.tool.exec')!;
+  runAndTraceOpenClaw(command, endpoint).catch((e) => {
+    console.error(String((e as any)?.message || e));
+    process.exit(1);
+  });
 } else {
-  console.log('Usage: prompttrace analyze|traces|failures|export|dashboard [--format md|json] [--range 7d]');
+  console.log('Usage: prompttrace analyze|traces|failures|export|dashboard|openclaw [--format md|json] [--range 7d]');
 }
