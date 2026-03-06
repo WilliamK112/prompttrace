@@ -57,6 +57,26 @@
   <h2>OpenClaw Usage</h2>
   <div class="card"><pre id="openclaw" class="mono"></pre></div>
 
+  <h2>Quick Add API Tracker</h2>
+  <div class="card">
+    <p style="margin-top:0;color:#94a3b8;">Fill these fields, then copy the generated snippet into your app.</p>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+      <label>Provider<br/><input id="wProvider" placeholder="openai / gemini / custom" value="openai"/></label>
+      <label>Model<br/><input id="wModel" placeholder="gpt-4o-mini" value="gpt-4o-mini"/></label>
+      <label>Endpoint name<br/><input id="wEndpoint" placeholder="chat.reply" value="chat.reply"/></label>
+      <label>API URL<br/><input id="wUrl" placeholder="https://api.openai.com/v1/chat/completions" value="https://api.openai.com/v1/chat/completions"/></label>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="generateSnippets()">Generate Snippets</button>
+      <button onclick="copySnippet('browserSnippet')">Copy Browser Snippet</button>
+      <button onclick="copySnippet('nodeSnippet')">Copy Node Snippet</button>
+    </div>
+    <h3>Browser (fetch) snippet</h3>
+    <pre id="browserSnippet" class="mono" style="white-space:pre-wrap"></pre>
+    <h3>Node (fetch) snippet</h3>
+    <pre id="nodeSnippet" class="mono" style="white-space:pre-wrap"></pre>
+  </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
     const pct = (n) => (n * 100).toFixed(1) + '%';
@@ -107,8 +127,29 @@
       </tr>`).join('');
     }
 
+    function generateSnippets() {
+      const provider = $('wProvider').value || 'custom';
+      const model = $('wModel').value || 'unknown-model';
+      const endpoint = $('wEndpoint').value || 'api.call';
+      const url = $('wUrl').value || 'https://api.example.com/v1';
+
+      const browser = `// PromptTrace browser tracker\nasync function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok';\n  let errorCategory = null;\n  let errorMessage = '';\n\n  try {\n    const res = await fetch('${url}', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(payload)\n    });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota'\n      : /403|permission|forbidden/i.test(errorMessage) ? 'permission'\n      : /timeout|etimedout/i.test(errorMessage) ? 'timeout'\n      : /network|fetch|econn/i.test(errorMessage) ? 'network'\n      : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        span_id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),\n        timestamp_start: new Date(start).toISOString(),\n        timestamp_end: new Date(end).toISOString(),\n        latency_ms: end - start,\n        provider: '${provider}',\n        model: '${model}',\n        endpoint: '${endpoint}',\n        request_type: 'text',\n        status,\n        error_category: errorCategory,\n        error_message_preview: errorMessage?.slice(0, 300),\n        input_tokens: null, output_tokens: null, total_tokens: null,\n        retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' },\n        cache: { hit: false },\n        estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false\n      }),\n      keepalive: true\n    }).catch(() => {});\n  }\n}`;
+
+      const node = `// PromptTrace node tracker\nimport { randomUUID } from 'node:crypto';\n\nexport async function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok';\n  let errorCategory = null;\n  let errorMessage = '';\n\n  try {\n    const res = await fetch('${url}', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(payload)\n    });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota'\n      : /403|permission|forbidden/i.test(errorMessage) ? 'permission'\n      : /timeout|etimedout/i.test(errorMessage) ? 'timeout'\n      : /network|fetch|econn/i.test(errorMessage) ? 'network'\n      : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        span_id: randomUUID(),\n        timestamp_start: new Date(start).toISOString(),\n        timestamp_end: new Date(end).toISOString(),\n        latency_ms: end - start,\n        provider: '${provider}',\n        model: '${model}',\n        endpoint: '${endpoint}',\n        request_type: 'text',\n        status,\n        error_category: errorCategory,\n        error_message_preview: errorMessage?.slice(0, 300),\n        input_tokens: null, output_tokens: null, total_tokens: null,\n        retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' },\n        cache: { hit: false },\n        estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false\n      })\n    }).catch(() => {});\n  }\n}`;
+
+      $('browserSnippet').textContent = browser;
+      $('nodeSnippet').textContent = node;
+    }
+
+    async function copySnippet(id) {
+      const text = $(id).textContent || '';
+      await navigator.clipboard.writeText(text);
+      alert('Copied: ' + id);
+    }
+
     async function loadAll() { await loadOverview(); await loadFailures(); await loadOpenClaw(); await loadTraces(); }
     loadAll();
+    generateSnippets();
   </script>
 </body>
 </html>
