@@ -257,6 +257,12 @@
     } catch { return iso; }
   }
 
+  function fmtLatency(ms) {
+    const n = Number(ms || 0);
+    if (n < 1000) return `${n} ms`;
+    return `${(n / 1000).toFixed(1)} s`;
+  }
+
   function badgeStatus(s) {
     return `<span class="badge ${s === 'ok' ? 'ok' : 'err'}">${s}</span>`;
   }
@@ -291,8 +297,8 @@
       <div class="card"><div class="kpi-label">Est. Cost</div><div class="kpi-value warn">${fmtUsd(o.totalEstimatedCostUsd)}</div></div>`;
 
     $('kpisPerf').innerHTML = `
-      <div class="card"><div class="kpi-label">P50 Latency</div><div class="kpi-value ${severityByLatency(o.p50LatencyMs)}">${o.p50LatencyMs || 0}ms</div></div>
-      <div class="card"><div class="kpi-label">P95 Latency</div><div class="kpi-value ${severityByLatency(o.p95LatencyMs)}">${o.p95LatencyMs || 0}ms</div></div>
+      <div class="card"><div class="kpi-label">P50 Latency</div><div class="kpi-value ${severityByLatency(o.p50LatencyMs)}">${fmtLatency(o.p50LatencyMs || 0)}</div></div>
+      <div class="card"><div class="kpi-label">P95 Latency</div><div class="kpi-value ${severityByLatency(o.p95LatencyMs)}">${fmtLatency(o.p95LatencyMs || 0)}</div></div>
       <div class="card"><div class="kpi-label">Retry Success</div><div class="kpi-value ${o.retrySuccessRate < 0.5 ? 'danger' : 'warn'}">${pct(o.retrySuccessRate)}</div></div>`;
 
     const endpointEntries = Object.entries(o.byEndpoint || {});
@@ -308,16 +314,16 @@
     `;
 
     renderBars('callsChart', endpointEntries, (v) => v.calls, (v) => String(v));
-    renderBars('latencyChart', endpointEntries, (v) => v.p95LatencyMs, (v) => `${v}ms`);
+    renderBars('latencyChart', endpointEntries, (v) => v.p95LatencyMs, (v) => fmtLatency(v));
     renderBars('costChart', endpointEntries, (v) => v.costUsd, (v) => fmtUsd(v));
 
     $('overviewRaw').textContent = JSON.stringify(o, null, 2);
 
     const insights = [];
-    if (topSlow) insights.push(`${topSlow[0]} has the highest P95 latency (${topSlow[1].p95LatencyMs}ms).`);
-    if (topCost) insights.push(`${topCost[0]} currently has the highest estimated cost (${fmtUsd(topCost[1].costUsd)}).`);
+    if (topSlow) insights.push(`<a href="#" onclick="quickFilterEndpoint('${topSlow[0]}');return false;">${topSlow[0]} has the highest P95 latency (${fmtLatency(topSlow[1].p95LatencyMs)}).</a>`);
+    if (topCost) insights.push(`<a href="#" onclick="quickFilterEndpoint('${topCost[0]}');return false;">${topCost[0]} currently has the highest estimated cost (${fmtUsd(topCost[1].costUsd)}).</a>`);
     const errCats = Object.entries(o.byErrorCategory || {}).sort((a,b)=>b[1]-a[1]);
-    if (errCats[0]) insights.push(`Top error category is ${errCats[0][0]} (${errCats[0][1]} events).`);
+    if (errCats[0]) insights.push(`<a href="#" onclick="quickFilterError('${errCats[0][0]}');return false;">Top error category is ${errCats[0][0]} (${errCats[0][1]} events).</a>`);
     $('insights').innerHTML = insights.length ? insights.map(x => `<li>${x}</li>`).join('') : '<li>No notable issues in selected range.</li>';
   }
 
@@ -360,9 +366,10 @@
   function showTraceDetail(idx) {
     const r = (window.__traceRows || [])[idx];
     if (!r) return;
+    const structured = `Request\n- Endpoint: ${r.endpoint}\n- Provider/Model: ${r.provider} / ${r.model}\n- Type: ${r.request_type}\n- Time: ${r.timestamp_start}\n\nExecution\n- Latency: ${fmtLatency(r.latency_ms)}\n- Tokens: ${r.total_tokens ?? '-'}\n- Cost: ${fmtUsd(r.estimated_cost_usd || 0)}\n- Retries: ${r.retries?.count ?? 0}\n- Cache hit: ${r.cache?.hit ? 'yes' : 'no'}\n\nResult\n- Status: ${r.status}\n- Error category: ${r.error_category || '-'}\n- Error preview: ${r.error_message_preview || '-'}\n- Redaction: ${r.redaction_applied ? 'applied' : 'not applied'}\n\n--- Raw JSON ---\n${JSON.stringify(r, null, 2)}`;
     $('traceDetail').style.display = 'block';
-    $('traceDetail').innerHTML = `<div class="small">Trace detail</div><pre>${JSON.stringify(r, null, 2)}</pre>`;
-    $('drawerContent').textContent = JSON.stringify(r, null, 2);
+    $('traceDetail').innerHTML = `<div class="small">Trace detail</div><pre>${structured}</pre>`;
+    $('drawerContent').textContent = structured;
     $('traceDrawer').classList.add('open');
   }
 
@@ -385,6 +392,21 @@
     $('fStatus').value = '';
     $('fErr').value = '';
     loadTraces();
+  }
+
+  function quickFilterEndpoint(endpoint) {
+    $('fEndpoint').value = endpoint;
+    $('fStatus').value = '';
+    $('fErr').value = '';
+    loadTraces();
+    window.scrollTo({ top: document.querySelector('.section:nth-of-type(4)')?.offsetTop || 500, behavior: 'smooth' });
+  }
+
+  function quickFilterError(err) {
+    $('fStatus').value = 'error';
+    $('fErr').value = err;
+    loadTraces();
+    window.scrollTo({ top: document.querySelector('.section:nth-of-type(4)')?.offsetTop || 500, behavior: 'smooth' });
   }
 
   async function loadFailures() {
@@ -411,7 +433,7 @@
         </div>
         <div style="margin-top:6px;font-weight:600">${summary}</div>
         <div class="small" style="margin-top:6px">${x.error_message_preview || ''}</div>
-        <details style="margin-top:8px"><summary>View details</summary><pre>${JSON.stringify(x, null, 2)}</pre></details>
+        <details style="margin-top:8px"><summary>View details</summary><pre>Request\n- endpoint: ${x.endpoint}\n- model: ${x.model}\n- request type: ${x.request_type}\n- timestamp: ${x.timestamp_start}\n\nFailure\n- category: ${x.error_category || '-'}\n- message: ${x.error_message_preview || '-'}\n- final outcome: ${x.retries?.finalOutcome || 'failed'}\n- retries: ${x.retries?.count || 0}\n\nExecution\n- latency: ${fmtLatency(x.latency_ms)}\n- cache hit: ${x.cache?.hit ? 'yes' : 'no'}\n- pricing source: ${x.pricing_source || '-'}\n- redaction applied: ${x.redaction_applied ? 'yes' : 'no'}\n\nDeveloper\n- prompt hash: ${x.prompt_hash || '-'}\n--- Raw JSON ---\n${JSON.stringify(x, null, 2)}</pre></details>
       </div>`;
     }).join('');
 
