@@ -12,7 +12,9 @@ PromptTrace gives LLM apps a black-box recorder: every model call is traced and 
 - Aggregator: totals, success rate, P50/P95, by endpoint/model/day
 - Failures view: error breakdown + retry success rate
 - Traces query with filters
-- Local dashboard server (`/api/overview`, `/api/traces`, `/api/failures`)
+- Local dashboard server (`/api/overview`, `/api/traces`, `/api/failures`, `/api/openclaw`, `/api/ingest`)
+- OpenClaw usage tracker (`prompttrace openclaw -- ...`)
+- Trace rotation/retention (`prompttrace rotate --keep-lines 5000`)
 - Exporters: JSON + Markdown report
 
 ## Install
@@ -41,6 +43,12 @@ node dist/index.js export --format json --range 7d
 # Dashboard
 node dist/index.js dashboard --port 4310
 # then open http://localhost:4310
+
+# Track OpenClaw command usage
+node dist/index.js openclaw --endpoint openclaw.tool.exec -- openclaw status
+
+# Keep trace file bounded
+node dist/index.js rotate --keep-lines 5000
 ```
 
 ## Example integration

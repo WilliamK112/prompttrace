@@ -110,6 +110,13 @@
     .tab.active { border-color: #1d4ed8; color: #bfdbfe; }
 
     .muted { color: var(--muted); }
+    .th-sort { cursor: pointer; user-select: none; }
+    .drawer {
+      position: fixed; top: 0; right: -520px; width: 520px; height: 100vh;
+      background: #0b1324; border-left: 1px solid var(--border); transition: right .18s ease;
+      padding: 14px; z-index: 40; overflow: auto;
+    }
+    .drawer.open { right: 0; }
   </style>
 </head>
 <body>
@@ -127,6 +134,7 @@
         <option value="30d">30d</option>
       </select>
       <button class="primary" onclick="loadAll()">Refresh</button>
+      <label class="small" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" /> Auto refresh</label>
       <span class="small" id="updatedAt">Last updated: -</span>
     </div>
   </div>
@@ -167,7 +175,7 @@
         <button class="primary" onclick="loadTraces()">Apply</button>
       </div>
       <table>
-        <thead><tr><th>time</th><th>endpoint</th><th>model</th><th class="num">latency</th><th class="num">tokens</th><th class="num">cost</th><th>status</th></tr></thead>
+        <thead><tr><th class="th-sort" onclick="setSort('timestamp_start')">time</th><th class="th-sort" onclick="setSort('endpoint')">endpoint</th><th>model</th><th class="num th-sort" onclick="setSort('latency_ms')">latency</th><th class="num th-sort" onclick="setSort('total_tokens')">tokens</th><th class="num th-sort" onclick="setSort('estimated_cost_usd')">cost</th><th class="th-sort" onclick="setSort('status')">status</th></tr></thead>
         <tbody id="traceRows"></tbody>
       </table>
       <div id="traceEmpty" class="small" style="margin-top:8px;display:none;">No traces in selected range/filter.</div>
@@ -220,10 +228,19 @@
     </div>
   </div>
 </div>
+<div id="traceDrawer" class="drawer">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <strong>Trace Detail</strong><button onclick="closeDrawer()">Close</button>
+  </div>
+  <div style="height:10px"></div>
+  <pre id="drawerContent"></pre>
+</div>
 
 <script>
   const $ = (id) => document.getElementById(id);
   const pct = (n) => ((n || 0) * 100).toFixed(1) + '%';
+  let autoRefreshTimer = null;
+  let traceSort = { key: 'timestamp_start', dir: 'desc' };
 
   function fmtUsd(v) {
     const n = Number(v || 0);
@@ -304,6 +321,17 @@
     $('insights').innerHTML = insights.length ? insights.map(x => `<li>${x}</li>`).join('') : '<li>No notable issues in selected range.</li>';
   }
 
+  function sortRows(rows) {
+    const { key, dir } = traceSort;
+    const mul = dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = a?.[key] ?? '';
+      const bv = b?.[key] ?? '';
+      if (typeof av === 'number' || typeof bv === 'number') return (Number(av) - Number(bv)) * mul;
+      return String(av).localeCompare(String(bv)) * mul;
+    });
+  }
+
   async function loadTraces() {
     const range = $('range').value;
     const q = new URLSearchParams({ range, limit: '100' });
@@ -313,8 +341,9 @@
     if ($('fErr').value) q.set('error_category', $('fErr').value);
 
     const rows = await (await fetch('/api/traces?' + q.toString())).json();
-    $('traceEmpty').style.display = rows.length ? 'none' : 'block';
-    $('traceRows').innerHTML = rows.map((r, idx) => `<tr class="clickable" onclick='showTraceDetail(${JSON.stringify(idx)})' title='${r.timestamp_start}'>
+    const sorted = sortRows(rows);
+    $('traceEmpty').style.display = sorted.length ? 'none' : 'block';
+    $('traceRows').innerHTML = sorted.map((r, idx) => `<tr class="clickable" onclick='showTraceDetail(${JSON.stringify(idx)})' title='${r.timestamp_start}'>
       <td>${fmtTime(r.timestamp_start)}</td>
       <td>${r.endpoint}</td>
       <td><span class="badge model">${r.model}</span></td>
@@ -324,7 +353,7 @@
       <td>${badgeStatus(r.status)}</td>
     </tr>`).join('');
 
-    window.__traceRows = rows;
+    window.__traceRows = sorted;
     $('traceDetail').style.display = 'none';
   }
 
@@ -332,10 +361,22 @@
     const r = (window.__traceRows || [])[idx];
     if (!r) return;
     $('traceDetail').style.display = 'block';
-    $('traceDetail').innerHTML = `
-      <div class="small">Trace detail</div>
-      <pre>${JSON.stringify(r, null, 2)}</pre>
-    `;
+    $('traceDetail').innerHTML = `<div class="small">Trace detail</div><pre>${JSON.stringify(r, null, 2)}</pre>`;
+    $('drawerContent').textContent = JSON.stringify(r, null, 2);
+    $('traceDrawer').classList.add('open');
+  }
+
+  function closeDrawer() {
+    $('traceDrawer').classList.remove('open');
+  }
+
+  function setSort(key) {
+    if (traceSort.key === key) traceSort.dir = traceSort.dir === 'asc' ? 'desc' : 'asc';
+    else {
+      traceSort.key = key;
+      traceSort.dir = 'desc';
+    }
+    loadTraces();
   }
 
   function clearFilters() {
@@ -414,6 +455,15 @@
       $('tab' + t[0].toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
       $(t + 'Snippet').style.display = t === tab ? 'block' : 'none';
     });
+  }
+
+  function toggleAutoRefresh() {
+    const on = $('autoRefresh').checked;
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+    if (on) autoRefreshTimer = setInterval(loadAll, 15000);
   }
 
   async function loadAll() {

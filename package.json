@@ -14,7 +14,8 @@
     "failures": "node dist/index.js failures --range 7d",
     "export": "node dist/index.js export --format md --range 7d",
     "dashboard": "node dist/index.js dashboard --port 4310",
-    "openclaw": "node dist/index.js openclaw --endpoint openclaw.tool.exec --"
+    "openclaw": "node dist/index.js openclaw --endpoint openclaw.tool.exec --",
+    "rotate": "node dist/index.js rotate --keep-lines 5000"
   },
   "keywords": ["llm", "observability", "trace", "gemini", "openai"],
   "license": "MIT",

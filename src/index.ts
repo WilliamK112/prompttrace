@@ -5,6 +5,7 @@ import { listTraces, failureSummary } from './aggregator/traces.js';
 import { exportJson, exportMarkdown } from './cli/export.js';
 import { startDashboard } from './cli/dashboard.js';
 import { runAndTraceOpenClaw } from './cli/openclaw.js';
+import { rotateTraceFile } from './collector/jsonl.js';
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'analyze';
@@ -52,6 +53,10 @@ if (cmd === 'analyze') {
     console.error(String((e as any)?.message || e));
     process.exit(1);
   });
+} else if (cmd === 'rotate') {
+  const keep = Number(getArg('--keep-lines', '5000'));
+  const res = rotateTraceFile('.prompttrace/traces.jsonl', keep);
+  console.log(JSON.stringify(res, null, 2));
 } else {
-  console.log('Usage: prompttrace analyze|traces|failures|export|dashboard|openclaw [--format md|json] [--range 7d]');
+  console.log('Usage: prompttrace analyze|traces|failures|export|dashboard|openclaw|rotate [--format md|json] [--range 7d]');
 }
