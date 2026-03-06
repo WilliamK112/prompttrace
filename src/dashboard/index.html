@@ -69,7 +69,24 @@
       grid-template-columns: 1fr 1fr 120px 1fr auto auto;
       gap: 8px;
       margin-bottom: 10px;
+      align-items: start;
     }
+    .ac-wrap { position: relative; min-width: 0; }
+    .ac-input { width: 100%; }
+    .ac-menu {
+      position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+      background: #0f172a; border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 12px 28px rgba(0,0,0,.38);
+      z-index: 50; max-height: 220px; overflow: auto; display: none;
+    }
+    .ac-item {
+      padding: 8px 10px; font-size: 12px; border-bottom: 1px solid rgba(43,58,85,.55);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ac-item:last-child { border-bottom: none; }
+    .ac-item:hover, .ac-item.active { background: #17233a; }
+    .ac-empty { color: var(--muted); }
+    .hl { color: #bfdbfe; font-weight: 700; }
 
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; font-size: 12px; }
@@ -110,6 +127,7 @@
     .tab.active { border-color: #1d4ed8; color: #bfdbfe; }
 
     .muted { color: var(--muted); }
+    #insights a, #insights a:visited { color: var(--text); text-decoration: underline; }
     .th-sort { cursor: pointer; user-select: none; }
     .drawer {
       position: fixed; top: 0; right: -520px; width: 520px; height: 100vh;
@@ -167,10 +185,16 @@
     <h2>Traces</h2>
     <div class="card">
       <div class="filter-row">
-        <input id="fModel" placeholder="Model" />
-        <input id="fEndpoint" placeholder="Endpoint" />
+        <div class="ac-wrap">
+          <input id="fModel" class="ac-input" placeholder="Filter by model" autocomplete="off" />
+          <div id="fModelMenu" class="ac-menu"></div>
+        </div>
+        <div class="ac-wrap">
+          <input id="fEndpoint" class="ac-input" placeholder="Filter by endpoint" autocomplete="off" />
+          <div id="fEndpointMenu" class="ac-menu"></div>
+        </div>
         <select id="fStatus"><option value="">all status</option><option value="ok">ok</option><option value="error">error</option></select>
-        <input id="fErr" placeholder="Error keyword/category" />
+        <input id="fErr" placeholder="Search error keyword or category" />
         <button class="ghost" onclick="clearFilters()">Clear</button>
         <button class="primary" onclick="loadTraces()">Apply</button>
       </div>
@@ -241,6 +265,10 @@
   const pct = (n) => ((n || 0) * 100).toFixed(1) + '%';
   let autoRefreshTimer = null;
   let traceSort = { key: 'timestamp_start', dir: 'desc' };
+  let modelOptions = [];
+  let endpointOptions = [];
+  let modelAC = null;
+  let endpointAC = null;
 
   function fmtUsd(v) {
     const n = Number(v || 0);
@@ -265,6 +293,129 @@
 
   function badgeStatus(s) {
     return `<span class="badge ${s === 'ok' ? 'ok' : 'err'}">${s}</span>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function fuzzySubsequenceScore(query, target) {
+    if (!query) return 0;
+    let qi = 0;
+    let streak = 0;
+    let score = 0;
+    for (let i = 0; i < target.length && qi < query.length; i++) {
+      if (target[i] === query[qi]) {
+        qi += 1;
+        streak += 1;
+        score += 4 + streak;
+      } else {
+        streak = 0;
+      }
+    }
+    if (qi < query.length) return -1;
+    return score;
+  }
+
+  function rankMatches(query, options) {
+    const q = query.trim().toLowerCase();
+    const ranked = options.map((o) => {
+      const t = o.value.toLowerCase();
+      let score = -1;
+      if (!q) score = 1000 + (o.count || 0);
+      else if (t.startsWith(q)) score = 900 - t.indexOf(q) + (o.count || 0) * 0.1;
+      else if (t.includes(q)) score = 700 - t.indexOf(q) + (o.count || 0) * 0.1;
+      else {
+        const f = fuzzySubsequenceScore(q, t);
+        if (f >= 0) score = 500 + f + (o.count || 0) * 0.05;
+      }
+      return { ...o, score };
+    }).filter(x => x.score >= 0);
+
+    ranked.sort((a, b) => (b.score - a.score) || a.value.localeCompare(b.value));
+    return ranked.slice(0, 5);
+  }
+
+  function highlightMatch(text, query) {
+    const q = query.trim();
+    if (!q) return escapeHtml(text);
+    const i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i >= 0) {
+      return `${escapeHtml(text.slice(0, i))}<span class="hl">${escapeHtml(text.slice(i, i + q.length))}</span>${escapeHtml(text.slice(i + q.length))}`;
+    }
+    return escapeHtml(text);
+  }
+
+  class AutocompleteInput {
+    constructor(inputEl, menuEl, getOptions) {
+      this.inputEl = inputEl;
+      this.menuEl = menuEl;
+      this.getOptions = getOptions;
+      this.items = [];
+      this.activeIndex = -1;
+      this.bind();
+    }
+
+    bind() {
+      this.inputEl.addEventListener('focus', () => this.render(this.inputEl.value));
+      this.inputEl.addEventListener('input', () => this.render(this.inputEl.value));
+      this.inputEl.addEventListener('keydown', (e) => {
+        if (this.menuEl.style.display !== 'block') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); this.move(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); this.move(-1); }
+        else if (e.key === 'Enter') {
+          if (this.activeIndex >= 0 && this.items[this.activeIndex]) {
+            e.preventDefault();
+            this.select(this.items[this.activeIndex].value);
+          }
+        } else if (e.key === 'Escape') {
+          this.close();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!this.menuEl.contains(e.target) && e.target !== this.inputEl) this.close();
+      });
+    }
+
+    move(delta) {
+      if (!this.items.length) return;
+      this.activeIndex = (this.activeIndex + delta + this.items.length) % this.items.length;
+      this.paint();
+    }
+
+    select(value) {
+      this.inputEl.value = value;
+      this.close();
+    }
+
+    paint() {
+      const q = this.inputEl.value;
+      if (!this.items.length) {
+        this.menuEl.innerHTML = `<div class="ac-item ac-empty">No matches</div>`;
+        this.menuEl.style.display = 'block';
+        return;
+      }
+      this.menuEl.innerHTML = this.items.map((x, idx) => `<div class="ac-item ${idx === this.activeIndex ? 'active' : ''}" title="${escapeHtml(x.value)}" data-value="${escapeHtml(x.value)}">${highlightMatch(x.value, q)}</div>`).join('');
+      [...this.menuEl.querySelectorAll('.ac-item')].forEach((el) => {
+        const v = el.getAttribute('data-value');
+        if (!v) return;
+        el.addEventListener('mousedown', (ev) => { ev.preventDefault(); this.select(v); });
+      });
+      this.menuEl.style.display = 'block';
+    }
+
+    render(query) {
+      const opts = this.getOptions();
+      this.items = rankMatches(query, opts);
+      this.activeIndex = this.items.length ? 0 : -1;
+      this.paint();
+    }
+
+    close() {
+      this.menuEl.style.display = 'none';
+      this.activeIndex = -1;
+    }
   }
 
   function renderBars(targetId, entries, valueGetter, labelFmt = (v) => String(v)) {
@@ -339,6 +490,8 @@
   }
 
   async function loadTraces() {
+    modelAC?.close();
+    endpointAC?.close();
     const range = $('range').value;
     const q = new URLSearchParams({ range, limit: '100' });
     if ($('fModel').value) q.set('model', $('fModel').value);
@@ -386,11 +539,26 @@
     loadTraces();
   }
 
+  async function loadAutocompleteOptions() {
+    const range = $('range').value;
+    const rows = await (await fetch(`/api/traces?range=${range}&limit=1000`)).json();
+    const modelMap = new Map();
+    const endpointMap = new Map();
+    for (const r of rows) {
+      modelMap.set(r.model, (modelMap.get(r.model) || 0) + 1);
+      endpointMap.set(r.endpoint, (endpointMap.get(r.endpoint) || 0) + 1);
+    }
+    modelOptions = [...modelMap.entries()].map(([value, count]) => ({ value, count }));
+    endpointOptions = [...endpointMap.entries()].map(([value, count]) => ({ value, count }));
+  }
+
   function clearFilters() {
     $('fModel').value = '';
     $('fEndpoint').value = '';
     $('fStatus').value = '';
     $('fErr').value = '';
+    modelAC?.close();
+    endpointAC?.close();
     loadTraces();
   }
 
@@ -492,11 +660,14 @@
     await loadOverview();
     await loadFailures();
     await loadOpenClaw();
+    await loadAutocompleteOptions();
     await loadTraces();
     $('updatedAt').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
   }
 
   generateSnippets();
+  modelAC = new AutocompleteInput($('fModel'), $('fModelMenu'), () => modelOptions);
+  endpointAC = new AutocompleteInput($('fEndpoint'), $('fEndpointMenu'), () => endpointOptions);
   loadAll();
 </script>
 </body>
