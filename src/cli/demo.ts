@@ -1,8 +1,10 @@
 import { withTrace } from '../sdk/trace.js';
 import { withRetry } from '../sdk/retry.js';
 
+let shouldFail = true;
 async function fakeGeminiCall(prompt: string): Promise<{ text: string }> {
-  if (prompt.includes('fail-once') && Math.random() < 0.8) {
+  if (prompt.includes('fail-once') && shouldFail) {
+    shouldFail = false;
     const err: any = new Error('RESOURCE_EXHAUSTED: quota exceeded');
     err.code = 429;
     throw err;

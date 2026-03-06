@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PromptTrace Dashboard</title>
+  <style>
+    body { font-family: Inter, system-ui, Arial; margin: 20px; background: #0f172a; color: #e2e8f0; }
+    .row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
+    .k { font-size: 12px; color: #94a3b8; }
+    .v { font-size: 24px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; font-size: 12px; }
+    input, select { background: #0b1220; color: #e2e8f0; border: 1px solid #334155; padding: 6px; border-radius: 6px; }
+    h2 { margin-top: 24px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <h1>PromptTrace Dashboard</h1>
+  <div style="margin-bottom:12px;">
+    Range:
+    <select id="range">
+      <option value="1d">Today</option>
+      <option value="7d" selected>7d</option>
+      <option value="30d">30d</option>
+    </select>
+    <button onclick="loadAll()">Refresh</button>
+  </div>
+
+  <div class="row" id="kpis"></div>
+
+  <h2>Overview</h2>
+  <div class="card"><pre id="overview" class="mono"></pre></div>
+
+  <h2>Failures</h2>
+  <div class="card"><pre id="failures" class="mono"></pre></div>
+
+  <h2>Traces</h2>
+  <div class="card">
+    <div>
+      Model <input id="fModel" />
+      Endpoint <input id="fEndpoint" />
+      Status
+      <select id="fStatus"><option value="">all</option><option value="ok">ok</option><option value="error">error</option></select>
+      Error
+      <input id="fErr" />
+      <button onclick="loadTraces()">Apply</button>
+    </div>
+    <table>
+      <thead><tr><th>timestamp</th><th>endpoint</th><th>model</th><th>latency</th><th>tokens</th><th>cost</th><th>status</th></tr></thead>
+      <tbody id="traceRows"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const pct = (n) => (n * 100).toFixed(1) + '%';
+
+    async function loadOverview() {
+      const range = $('range').value;
+      const o = await (await fetch(`/api/overview?range=${range}`)).json();
+      $('kpis').innerHTML = `
+        <div class="card"><div class="k">Total Calls</div><div class="v">${o.totalCalls}</div></div>
+        <div class="card"><div class="k">Success Rate</div><div class="v">${pct(o.successRate)}</div></div>
+        <div class="card"><div class="k">Est. Cost</div><div class="v">$${o.totalEstimatedCostUsd.toFixed(4)}</div></div>
+        <div class="card"><div class="k">P50 Latency</div><div class="v">${o.p50LatencyMs}ms</div></div>
+        <div class="card"><div class="k">P95 Latency</div><div class="v">${o.p95LatencyMs}ms</div></div>
+        <div class="card"><div class="k">Retry Success</div><div class="v">${pct(o.retrySuccessRate || 0)}</div></div>
+      `;
+      $('overview').textContent = JSON.stringify(o, null, 2);
+    }
+
+    async function loadFailures() {
+      const range = $('range').value;
+      const f = await (await fetch(`/api/failures?range=${range}`)).json();
+      $('failures').textContent = JSON.stringify(f, null, 2);
+    }
+
+    async function loadTraces() {
+      const range = $('range').value;
+      const q = new URLSearchParams({ range, limit: '100' });
+      if ($('fModel').value) q.set('model', $('fModel').value);
+      if ($('fEndpoint').value) q.set('endpoint', $('fEndpoint').value);
+      if ($('fStatus').value) q.set('status', $('fStatus').value);
+      if ($('fErr').value) q.set('error_category', $('fErr').value);
+
+      const rows = await (await fetch('/api/traces?' + q.toString())).json();
+      $('traceRows').innerHTML = rows.map(r => `<tr>
+        <td>${r.timestamp_start}</td>
+        <td>${r.endpoint}</td>
+        <td>${r.model}</td>
+        <td>${r.latency_ms}ms</td>
+        <td>${r.total_tokens ?? '-'}</td>
+        <td>$${(r.estimated_cost_usd || 0).toFixed(6)}</td>
+        <td>${r.status}</td>
+      </tr>`).join('');
+    }
+
+    async function loadAll() { await loadOverview(); await loadFailures(); await loadTraces(); }
+    loadAll();
+  </script>
+</body>
+</html>

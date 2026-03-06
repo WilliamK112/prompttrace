@@ -10,7 +10,10 @@
     "build": "tsc -p tsconfig.json",
     "dev": "node --loader ts-node/esm src/index.ts",
     "analyze": "node dist/index.js analyze",
-    "export": "node dist/index.js export --format md --range 7d"
+    "traces": "node dist/index.js traces --range 7d --limit 50",
+    "failures": "node dist/index.js failures --range 7d",
+    "export": "node dist/index.js export --format md --range 7d",
+    "dashboard": "node dist/index.js dashboard --port 4310"
   },
   "keywords": ["llm", "observability", "trace", "gemini", "openai"],
   "license": "MIT",
