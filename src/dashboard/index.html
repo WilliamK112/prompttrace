@@ -5,151 +5,427 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PromptTrace Dashboard</title>
   <style>
-    body { font-family: Inter, system-ui, Arial; margin: 20px; background: #0f172a; color: #e2e8f0; }
-    .row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
-    .card { background: #111827; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
-    .k { font-size: 12px; color: #94a3b8; }
-    .v { font-size: 24px; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; font-size: 12px; }
-    input, select { background: #0b1220; color: #e2e8f0; border: 1px solid #334155; padding: 6px; border-radius: 6px; }
-    h2 { margin-top: 24px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    :root {
+      --bg: #0b1220;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --border: #2b3a55;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --brand: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: Inter, system-ui, Arial; margin: 0; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 20px; }
+
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+      margin-bottom: 18px;
+    }
+    .title { font-size: 28px; font-weight: 800; margin: 0; }
+    .subtitle { color: var(--muted); margin-top: 4px; font-size: 13px; }
+    .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    .section { margin-top: 22px; }
+    .section h2 { margin: 0 0 10px; font-size: 18px; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 10px;
+    }
+    .kpi-label { color: var(--muted); font-size: 12px; }
+    .kpi-value { font-size: 30px; font-weight: 800; line-height: 1.1; margin-top: 5px; }
+    .kpi-value.ok { color: var(--ok); }
+    .kpi-value.warn { color: var(--warn); }
+    .kpi-value.danger { color: var(--danger); }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .small { font-size: 12px; color: var(--muted); }
+    .big { font-size: 20px; font-weight: 700; margin-top: 4px; }
+
+    .chart-list { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+    .bar-row { display: grid; grid-template-columns: 140px 1fr 58px; gap: 8px; align-items: center; margin: 6px 0; }
+    .bar-wrap { background: #0b1324; border: 1px solid var(--border); border-radius: 999px; height: 10px; overflow: hidden; }
+    .bar { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 120px 1fr auto auto;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; font-size: 12px; }
+    th { color: var(--muted); font-weight: 600; }
+    td.num, th.num { text-align: right; }
+    tr.clickable:hover { background: #0d172a; cursor: pointer; }
+
+    .badge { border-radius: 999px; padding: 3px 9px; font-size: 11px; border: 1px solid; display: inline-block; }
+    .badge.ok { color: #bbf7d0; border-color: #166534; background: rgba(34,197,94,.12); }
+    .badge.err { color: #fecaca; border-color: #991b1b; background: rgba(239,68,68,.12); }
+    .badge.model { color: #bfdbfe; border-color: #1d4ed8; background: rgba(59,130,246,.15); }
+
+    .failure-list { display: grid; gap: 10px; }
+    .failure-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--panel-2); }
+    .failure-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .detail {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--panel-2);
+    }
+
+    details summary { cursor: pointer; color: var(--muted); }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+    input, select, button {
+      background: #0b1324; color: var(--text); border: 1px solid var(--border);
+      padding: 8px 10px; border-radius: 8px; font-size: 13px;
+    }
+    button.primary { background: #1d4ed8; border-color: #1d4ed8; }
+    button.ghost { background: transparent; }
+
+    .quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+    .tab { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; }
+    .tab.active { border-color: #1d4ed8; color: #bfdbfe; }
+
+    .muted { color: var(--muted); }
   </style>
 </head>
 <body>
-  <h1>PromptTrace Dashboard</h1>
-  <div style="margin-bottom:12px;">
-    Range:
-    <select id="range">
-      <option value="1d">Today</option>
-      <option value="7d" selected>7d</option>
-      <option value="30d">30d</option>
-    </select>
-    <button onclick="loadAll()">Refresh</button>
-  </div>
-
-  <div class="row" id="kpis"></div>
-
-  <h2>Traces</h2>
-  <div class="card">
+<div class="wrap">
+  <div class="header">
     <div>
-      Model <input id="fModel" />
-      Endpoint <input id="fEndpoint" />
-      Status
-      <select id="fStatus"><option value="">all</option><option value="ok">ok</option><option value="error">error</option></select>
-      Error
-      <input id="fErr" />
-      <button onclick="loadTraces()">Apply</button>
+      <h1 class="title">PromptTrace Dashboard</h1>
+      <div class="subtitle">Monitor model calls, latency, failures, and cost.</div>
     </div>
-    <table>
-      <thead><tr><th>timestamp</th><th>endpoint</th><th>model</th><th>latency</th><th>tokens</th><th>cost</th><th>status</th></tr></thead>
-      <tbody id="traceRows"></tbody>
-    </table>
+    <div class="toolbar">
+      <span class="small">Range</span>
+      <select id="range">
+        <option value="1d">Today</option>
+        <option value="7d" selected>7d</option>
+        <option value="30d">30d</option>
+      </select>
+      <button class="primary" onclick="loadAll()">Refresh</button>
+      <span class="small" id="updatedAt">Last updated: -</span>
+    </div>
   </div>
 
-  <h2>Overview</h2>
-  <div class="card"><pre id="overview" class="mono"></pre></div>
-
-  <h2>Failures</h2>
-  <div class="card"><pre id="failures" class="mono"></pre></div>
-
-  <h2>OpenClaw Usage</h2>
-  <div class="card"><pre id="openclaw" class="mono"></pre></div>
-
-  <h2>Quick Add API Tracker</h2>
-  <div class="card">
-    <p style="margin-top:0;color:#94a3b8;">Fill these fields, then copy the generated snippet into your app.</p>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-      <label>Provider<br/><input id="wProvider" placeholder="openai / gemini / custom" value="openai"/></label>
-      <label>Model<br/><input id="wModel" placeholder="gpt-4o-mini" value="gpt-4o-mini"/></label>
-      <label>Endpoint name<br/><input id="wEndpoint" placeholder="chat.reply" value="chat.reply"/></label>
-      <label>API URL<br/><input id="wUrl" placeholder="https://api.openai.com/v1/chat/completions" value="https://api.openai.com/v1/chat/completions"/></label>
-    </div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="generateSnippets()">Generate Snippets</button>
-      <button onclick="copySnippet('browserSnippet')">Copy Browser Snippet</button>
-      <button onclick="copySnippet('nodeSnippet')">Copy Node Snippet</button>
-    </div>
-    <h3>Browser (fetch) snippet</h3>
-    <pre id="browserSnippet" class="mono" style="white-space:pre-wrap"></pre>
-    <h3>Node (fetch) snippet</h3>
-    <pre id="nodeSnippet" class="mono" style="white-space:pre-wrap"></pre>
+  <div class="section">
+    <h2>KPI Overview</h2>
+    <div class="kpi-grid" id="kpisCore"></div>
+    <div style="height:10px"></div>
+    <div class="kpi-grid" id="kpisPerf"></div>
   </div>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
-    const pct = (n) => (n * 100).toFixed(1) + '%';
+  <div class="section">
+    <h2>Insights</h2>
+    <div class="card"><ul id="insights" style="margin:0; padding-left:18px;"></ul></div>
+  </div>
 
-    async function loadOverview() {
-      const range = $('range').value;
-      const o = await (await fetch(`/api/overview?range=${range}`)).json();
-      $('kpis').innerHTML = `
-        <div class="card"><div class="k">Total Calls</div><div class="v">${o.totalCalls}</div></div>
-        <div class="card"><div class="k">Success Rate</div><div class="v">${pct(o.successRate)}</div></div>
-        <div class="card"><div class="k">Est. Cost</div><div class="v">$${o.totalEstimatedCostUsd.toFixed(4)}</div></div>
-        <div class="card"><div class="k">P50 Latency</div><div class="v">${o.p50LatencyMs}ms</div></div>
-        <div class="card"><div class="k">P95 Latency</div><div class="v">${o.p95LatencyMs}ms</div></div>
-        <div class="card"><div class="k">Retry Success</div><div class="v">${pct(o.retrySuccessRate || 0)}</div></div>
-      `;
-      $('overview').textContent = JSON.stringify(o, null, 2);
+  <div class="section">
+    <h2>Overview</h2>
+    <div class="summary-grid" id="overviewCards"></div>
+    <div class="chart-list">
+      <div class="card"><div class="small">Calls by endpoint</div><div id="callsChart"></div></div>
+      <div class="card"><div class="small">P95 latency by endpoint</div><div id="latencyChart"></div></div>
+      <div class="card"><div class="small">Cost by endpoint</div><div id="costChart"></div></div>
+    </div>
+    <div style="height:10px"></div>
+    <details class="card"><summary>Developer raw overview JSON</summary><pre id="overviewRaw"></pre></details>
+  </div>
+
+  <div class="section">
+    <h2>Traces</h2>
+    <div class="card">
+      <div class="filter-row">
+        <input id="fModel" placeholder="Model" />
+        <input id="fEndpoint" placeholder="Endpoint" />
+        <select id="fStatus"><option value="">all status</option><option value="ok">ok</option><option value="error">error</option></select>
+        <input id="fErr" placeholder="Error keyword/category" />
+        <button class="ghost" onclick="clearFilters()">Clear</button>
+        <button class="primary" onclick="loadTraces()">Apply</button>
+      </div>
+      <table>
+        <thead><tr><th>time</th><th>endpoint</th><th>model</th><th class="num">latency</th><th class="num">tokens</th><th class="num">cost</th><th>status</th></tr></thead>
+        <tbody id="traceRows"></tbody>
+      </table>
+      <div id="traceEmpty" class="small" style="margin-top:8px;display:none;">No traces in selected range/filter.</div>
+      <div id="traceDetail" class="detail" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Failures</h2>
+    <div class="summary-grid" id="failureCards"></div>
+    <div class="card">
+      <div id="failureList" class="failure-list"></div>
+      <div id="failureEmpty" class="small" style="display:none;">No failures detected in selected range.</div>
+      <details style="margin-top:10px"><summary>Developer raw failures JSON</summary><pre id="failuresRaw"></pre></details>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>OpenClaw Usage</h2>
+    <div class="card">
+      <div class="summary-grid" id="openclawCards"></div>
+      <details><summary>Raw OpenClaw usage JSON</summary><pre id="openclawRaw"></pre></details>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Quick Add API Tracker</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0">Paste your API details and copy a ready tracking snippet.</p>
+      <div class="quick-grid">
+        <label>Provider<br/><input id="wProvider" value="openai" /></label>
+        <label>Model<br/><input id="wModel" value="gpt-4o-mini" /></label>
+        <label>Endpoint name<br/><input id="wEndpoint" value="chat.reply" /></label>
+        <label>API URL<br/><input id="wUrl" value="https://api.openai.com/v1/chat/completions" /></label>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="primary" onclick="generateSnippets()">Generate snippet</button>
+        <button onclick="copySnippet('browserSnippet')">Copy Browser</button>
+        <button onclick="copySnippet('nodeSnippet')">Copy Node</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="tabs">
+        <div id="tabBrowser" class="tab active" onclick="setTab('browser')">Browser</div>
+        <div id="tabNode" class="tab" onclick="setTab('node')">Node</div>
+        <div id="tabPython" class="tab" onclick="setTab('python')">Python (soon)</div>
+      </div>
+      <pre id="browserSnippet">// Your generated browser snippet will appear here.</pre>
+      <pre id="nodeSnippet" style="display:none">// Your generated node snippet will appear here.</pre>
+      <pre id="pythonSnippet" style="display:none"># Python template coming soon...</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const pct = (n) => ((n || 0) * 100).toFixed(1) + '%';
+
+  function fmtUsd(v) {
+    const n = Number(v || 0);
+    if (n === 0) return '$0';
+    if (n < 0.001) return `< $0.001`;
+    if (n < 1) return `$${n.toFixed(4)}`;
+    return `$${n.toFixed(2)}`;
+  }
+
+  function fmtTime(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour12: false });
+    } catch { return iso; }
+  }
+
+  function badgeStatus(s) {
+    return `<span class="badge ${s === 'ok' ? 'ok' : 'err'}">${s}</span>`;
+  }
+
+  function renderBars(targetId, entries, valueGetter, labelFmt = (v) => String(v)) {
+    const target = $(targetId);
+    if (!entries.length) {
+      target.innerHTML = '<div class="small">No data</div>';
+      return;
     }
+    const max = Math.max(...entries.map(([_, v]) => valueGetter(v)), 1);
+    target.innerHTML = entries.map(([k, v]) => {
+      const val = valueGetter(v);
+      const width = Math.max(4, Math.round((val / max) * 100));
+      return `<div class="bar-row"><div class="small" title="${k}">${k}</div><div class="bar-wrap"><div class="bar" style="width:${width}%"></div></div><div class="small" style="text-align:right">${labelFmt(val)}</div></div>`;
+    }).join('');
+  }
 
-    async function loadFailures() {
-      const range = $('range').value;
-      const f = await (await fetch(`/api/failures?range=${range}`)).json();
-      $('failures').textContent = JSON.stringify(f, null, 2);
-    }
+  function severityByLatency(ms) {
+    if (ms >= 10000) return 'danger';
+    if (ms >= 3000) return 'warn';
+    return '';
+  }
 
-    async function loadOpenClaw() {
-      const range = $('range').value;
-      const o = await (await fetch(`/api/openclaw?range=${range}`)).json();
-      $('openclaw').textContent = JSON.stringify(o, null, 2);
-    }
+  async function loadOverview() {
+    const range = $('range').value;
+    const o = await (await fetch(`/api/overview?range=${range}`)).json();
 
-    async function loadTraces() {
-      const range = $('range').value;
-      const q = new URLSearchParams({ range, limit: '100' });
-      if ($('fModel').value) q.set('model', $('fModel').value);
-      if ($('fEndpoint').value) q.set('endpoint', $('fEndpoint').value);
-      if ($('fStatus').value) q.set('status', $('fStatus').value);
-      if ($('fErr').value) q.set('error_category', $('fErr').value);
+    $('kpisCore').innerHTML = `
+      <div class="card"><div class="kpi-label">Total Calls</div><div class="kpi-value">${o.totalCalls || 0}</div></div>
+      <div class="card"><div class="kpi-label">Success Rate</div><div class="kpi-value ok">${pct(o.successRate)}</div></div>
+      <div class="card"><div class="kpi-label">Est. Cost</div><div class="kpi-value warn">${fmtUsd(o.totalEstimatedCostUsd)}</div></div>`;
 
-      const rows = await (await fetch('/api/traces?' + q.toString())).json();
-      $('traceRows').innerHTML = rows.map(r => `<tr>
-        <td>${r.timestamp_start}</td>
-        <td>${r.endpoint}</td>
-        <td>${r.model}</td>
-        <td>${r.latency_ms}ms</td>
-        <td>${r.total_tokens ?? '-'}</td>
-        <td>$${(r.estimated_cost_usd || 0).toFixed(6)}</td>
-        <td>${r.status}</td>
-      </tr>`).join('');
-    }
+    $('kpisPerf').innerHTML = `
+      <div class="card"><div class="kpi-label">P50 Latency</div><div class="kpi-value ${severityByLatency(o.p50LatencyMs)}">${o.p50LatencyMs || 0}ms</div></div>
+      <div class="card"><div class="kpi-label">P95 Latency</div><div class="kpi-value ${severityByLatency(o.p95LatencyMs)}">${o.p95LatencyMs || 0}ms</div></div>
+      <div class="card"><div class="kpi-label">Retry Success</div><div class="kpi-value ${o.retrySuccessRate < 0.5 ? 'danger' : 'warn'}">${pct(o.retrySuccessRate)}</div></div>`;
 
-    function generateSnippets() {
-      const provider = $('wProvider').value || 'custom';
-      const model = $('wModel').value || 'unknown-model';
-      const endpoint = $('wEndpoint').value || 'api.call';
-      const url = $('wUrl').value || 'https://api.example.com/v1';
+    const endpointEntries = Object.entries(o.byEndpoint || {});
+    const topTraffic = endpointEntries.sort((a,b)=>b[1].calls-a[1].calls)[0];
+    const topSlow = [...endpointEntries].sort((a,b)=>b[1].p95LatencyMs-a[1].p95LatencyMs)[0];
+    const topCost = [...endpointEntries].sort((a,b)=>b[1].costUsd-a[1].costUsd)[0];
 
-      const browser = `// PromptTrace browser tracker\nasync function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok';\n  let errorCategory = null;\n  let errorMessage = '';\n\n  try {\n    const res = await fetch('${url}', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(payload)\n    });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota'\n      : /403|permission|forbidden/i.test(errorMessage) ? 'permission'\n      : /timeout|etimedout/i.test(errorMessage) ? 'timeout'\n      : /network|fetch|econn/i.test(errorMessage) ? 'network'\n      : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        span_id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),\n        timestamp_start: new Date(start).toISOString(),\n        timestamp_end: new Date(end).toISOString(),\n        latency_ms: end - start,\n        provider: '${provider}',\n        model: '${model}',\n        endpoint: '${endpoint}',\n        request_type: 'text',\n        status,\n        error_category: errorCategory,\n        error_message_preview: errorMessage?.slice(0, 300),\n        input_tokens: null, output_tokens: null, total_tokens: null,\n        retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' },\n        cache: { hit: false },\n        estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false\n      }),\n      keepalive: true\n    }).catch(() => {});\n  }\n}`;
+    $('overviewCards').innerHTML = `
+      <div class="card"><div class="small">Total tokens</div><div class="big">${o.totalTokens || 0}</div></div>
+      <div class="card"><div class="small">Top endpoint by traffic</div><div class="big">${topTraffic ? topTraffic[0] : '-'}</div></div>
+      <div class="card"><div class="small">Slowest endpoint</div><div class="big">${topSlow ? topSlow[0] : '-'}</div></div>
+      <div class="card"><div class="small">Highest cost endpoint</div><div class="big">${topCost ? topCost[0] : '-'}</div></div>
+    `;
 
-      const node = `// PromptTrace node tracker\nimport { randomUUID } from 'node:crypto';\n\nexport async function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok';\n  let errorCategory = null;\n  let errorMessage = '';\n\n  try {\n    const res = await fetch('${url}', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify(payload)\n    });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota'\n      : /403|permission|forbidden/i.test(errorMessage) ? 'permission'\n      : /timeout|etimedout/i.test(errorMessage) ? 'timeout'\n      : /network|fetch|econn/i.test(errorMessage) ? 'network'\n      : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        span_id: randomUUID(),\n        timestamp_start: new Date(start).toISOString(),\n        timestamp_end: new Date(end).toISOString(),\n        latency_ms: end - start,\n        provider: '${provider}',\n        model: '${model}',\n        endpoint: '${endpoint}',\n        request_type: 'text',\n        status,\n        error_category: errorCategory,\n        error_message_preview: errorMessage?.slice(0, 300),\n        input_tokens: null, output_tokens: null, total_tokens: null,\n        retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' },\n        cache: { hit: false },\n        estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false\n      })\n    }).catch(() => {});\n  }\n}`;
+    renderBars('callsChart', endpointEntries, (v) => v.calls, (v) => String(v));
+    renderBars('latencyChart', endpointEntries, (v) => v.p95LatencyMs, (v) => `${v}ms`);
+    renderBars('costChart', endpointEntries, (v) => v.costUsd, (v) => fmtUsd(v));
 
-      $('browserSnippet').textContent = browser;
-      $('nodeSnippet').textContent = node;
-    }
+    $('overviewRaw').textContent = JSON.stringify(o, null, 2);
 
-    async function copySnippet(id) {
-      const text = $(id).textContent || '';
-      await navigator.clipboard.writeText(text);
-      alert('Copied: ' + id);
-    }
+    const insights = [];
+    if (topSlow) insights.push(`${topSlow[0]} has the highest P95 latency (${topSlow[1].p95LatencyMs}ms).`);
+    if (topCost) insights.push(`${topCost[0]} currently has the highest estimated cost (${fmtUsd(topCost[1].costUsd)}).`);
+    const errCats = Object.entries(o.byErrorCategory || {}).sort((a,b)=>b[1]-a[1]);
+    if (errCats[0]) insights.push(`Top error category is ${errCats[0][0]} (${errCats[0][1]} events).`);
+    $('insights').innerHTML = insights.length ? insights.map(x => `<li>${x}</li>`).join('') : '<li>No notable issues in selected range.</li>';
+  }
 
-    async function loadAll() { await loadOverview(); await loadFailures(); await loadOpenClaw(); await loadTraces(); }
-    loadAll();
-    generateSnippets();
-  </script>
+  async function loadTraces() {
+    const range = $('range').value;
+    const q = new URLSearchParams({ range, limit: '100' });
+    if ($('fModel').value) q.set('model', $('fModel').value);
+    if ($('fEndpoint').value) q.set('endpoint', $('fEndpoint').value);
+    if ($('fStatus').value) q.set('status', $('fStatus').value);
+    if ($('fErr').value) q.set('error_category', $('fErr').value);
+
+    const rows = await (await fetch('/api/traces?' + q.toString())).json();
+    $('traceEmpty').style.display = rows.length ? 'none' : 'block';
+    $('traceRows').innerHTML = rows.map((r, idx) => `<tr class="clickable" onclick='showTraceDetail(${JSON.stringify(idx)})' title='${r.timestamp_start}'>
+      <td>${fmtTime(r.timestamp_start)}</td>
+      <td>${r.endpoint}</td>
+      <td><span class="badge model">${r.model}</span></td>
+      <td class="num">${r.latency_ms}ms</td>
+      <td class="num">${r.total_tokens ?? '-'}</td>
+      <td class="num">${fmtUsd(r.estimated_cost_usd || 0)}</td>
+      <td>${badgeStatus(r.status)}</td>
+    </tr>`).join('');
+
+    window.__traceRows = rows;
+    $('traceDetail').style.display = 'none';
+  }
+
+  function showTraceDetail(idx) {
+    const r = (window.__traceRows || [])[idx];
+    if (!r) return;
+    $('traceDetail').style.display = 'block';
+    $('traceDetail').innerHTML = `
+      <div class="small">Trace detail</div>
+      <pre>${JSON.stringify(r, null, 2)}</pre>
+    `;
+  }
+
+  function clearFilters() {
+    $('fModel').value = '';
+    $('fEndpoint').value = '';
+    $('fStatus').value = '';
+    $('fErr').value = '';
+    loadTraces();
+  }
+
+  async function loadFailures() {
+    const range = $('range').value;
+    const f = await (await fetch(`/api/failures?range=${range}`)).json();
+    const topErr = Object.entries(f.byErrorCategory || {}).sort((a,b)=>b[1]-a[1])[0]?.[0] || '-';
+
+    $('failureCards').innerHTML = `
+      <div class="card"><div class="small">Total Failures</div><div class="big">${f.totalFailures || 0}</div></div>
+      <div class="card"><div class="small">Top Error Category</div><div class="big">${topErr}</div></div>
+      <div class="card"><div class="small">Retry Success Rate</div><div class="big">${pct(f.retrySuccessRate)}</div></div>
+      <div class="card"><div class="small">Final Failed Requests</div><div class="big">${f.totalFailures || 0}</div></div>
+    `;
+
+    const list = f.recentFailures || [];
+    $('failureEmpty').style.display = list.length ? 'none' : 'block';
+    $('failureList').innerHTML = list.map(x => {
+      const summary = `${x.endpoint} on ${x.model} failed with ${x.error_category || 'unknown'} after ${x.retries?.count || 0} retries.`;
+      return `<div class="failure-item">
+        <div class="failure-top">
+          ${badgeStatus('error')}
+          <span class="badge err">${x.error_category || 'unknown'}</span>
+          <span class="small">${fmtTime(x.timestamp_start)}</span>
+        </div>
+        <div style="margin-top:6px;font-weight:600">${summary}</div>
+        <div class="small" style="margin-top:6px">${x.error_message_preview || ''}</div>
+        <details style="margin-top:8px"><summary>View details</summary><pre>${JSON.stringify(x, null, 2)}</pre></details>
+      </div>`;
+    }).join('');
+
+    $('failuresRaw').textContent = JSON.stringify(f, null, 2);
+  }
+
+  async function loadOpenClaw() {
+    const range = $('range').value;
+    const o = await (await fetch(`/api/openclaw?range=${range}`)).json();
+    $('openclawCards').innerHTML = `
+      <div class="card"><div class="small">OpenClaw Events</div><div class="big">${o.totalOpenClawEvents || 0}</div></div>
+      <div class="card"><div class="small">OpenClaw Success Rate</div><div class="big">${pct(o.successRate)}</div></div>
+      <div class="card"><div class="small">Top OpenClaw Endpoint</div><div class="big">${Object.entries(o.byEndpoint || {}).sort((a,b)=>b[1]-a[1])[0]?.[0] || '-'}</div></div>
+      <div class="card"><div class="small">Recent events shown</div><div class="big">${(o.recent || []).length}</div></div>
+    `;
+    $('openclawRaw').textContent = JSON.stringify(o, null, 2);
+  }
+
+  function generateSnippets() {
+    const provider = $('wProvider').value || 'custom';
+    const model = $('wModel').value || 'unknown-model';
+    const endpoint = $('wEndpoint').value || 'api.call';
+    const url = $('wUrl').value || 'https://api.example.com/v1';
+
+    const browser = `// PromptTrace browser tracker\nasync function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok', errorCategory = null, errorMessage = '';\n  try {\n    const res = await fetch('${url}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota' : /403|permission|forbidden/i.test(errorMessage) ? 'permission' : /timeout|etimedout/i.test(errorMessage) ? 'timeout' : /network|fetch|econn/i.test(errorMessage) ? 'network' : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ span_id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), timestamp_start: new Date(start).toISOString(), timestamp_end: new Date(end).toISOString(), latency_ms: end - start, provider: '${provider}', model: '${model}', endpoint: '${endpoint}', request_type: 'text', status, error_category: errorCategory, error_message_preview: errorMessage?.slice(0,300), input_tokens: null, output_tokens: null, total_tokens: null, retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' }, cache: { hit: false }, estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false }), keepalive: true }).catch(() => {});\n  }\n}`;
+
+    const node = `import { randomUUID } from 'node:crypto';\n\nexport async function trackedApiCall(payload) {\n  const start = Date.now();\n  let status = 'ok', errorCategory = null, errorMessage = '';\n  try {\n    const res = await fetch('${url}', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });\n    if (!res.ok) throw new Error('HTTP ' + res.status);\n    return await res.json();\n  } catch (e) {\n    status = 'error';\n    errorMessage = String(e?.message || e);\n    errorCategory = /429|quota|resource_exhausted/i.test(errorMessage) ? 'quota' : /403|permission|forbidden/i.test(errorMessage) ? 'permission' : /timeout|etimedout/i.test(errorMessage) ? 'timeout' : /network|fetch|econn/i.test(errorMessage) ? 'network' : 'unknown';\n    throw e;\n  } finally {\n    const end = Date.now();\n    await fetch('http://localhost:4310/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ span_id: randomUUID(), timestamp_start: new Date(start).toISOString(), timestamp_end: new Date(end).toISOString(), latency_ms: end - start, provider: '${provider}', model: '${model}', endpoint: '${endpoint}', request_type: 'text', status, error_category: errorCategory, error_message_preview: errorMessage?.slice(0,300), input_tokens: null, output_tokens: null, total_tokens: null, retries: { count: 0, finalOutcome: status === 'ok' ? 'success' : 'failed' }, cache: { hit: false }, estimated_cost_usd: 0, pricing_source: 'user-custom', redaction_applied: false }) }).catch(() => {});\n  }\n}`;
+
+    $('browserSnippet').textContent = browser;
+    $('nodeSnippet').textContent = node;
+  }
+
+  async function copySnippet(id) {
+    const text = $(id).textContent || '';
+    await navigator.clipboard.writeText(text);
+    alert('Copied: ' + id);
+  }
+
+  function setTab(tab) {
+    ['browser','node','python'].forEach(t => {
+      $('tab' + t[0].toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+      $(t + 'Snippet').style.display = t === tab ? 'block' : 'none';
+    });
+  }
+
+  async function loadAll() {
+    await loadOverview();
+    await loadFailures();
+    await loadOpenClaw();
+    await loadTraces();
+    $('updatedAt').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+  }
+
+  generateSnippets();
+  loadAll();
+</script>
 </body>
 </html>
