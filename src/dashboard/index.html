@@ -267,6 +267,7 @@
   let traceSort = { key: 'timestamp_start', dir: 'desc' };
   let modelOptions = [];
   let endpointOptions = [];
+  let optionTraceRows = [];
   let modelAC = null;
   let endpointAC = null;
 
@@ -539,17 +540,44 @@
     loadTraces();
   }
 
+  function recomputeEndpointOptionsByModel() {
+    const normalizedModel = ($('fModel').value || '').trim().toLowerCase();
+    const relevantRows = normalizedModel
+      ? optionTraceRows.filter(r => String(r.model || '').toLowerCase() === normalizedModel)
+      : optionTraceRows;
+
+    const endpointMap = new Map();
+    for (const r of relevantRows) {
+      const ep = r.endpoint;
+      if (!ep) continue;
+      endpointMap.set(ep, (endpointMap.get(ep) || 0) + 1);
+    }
+    endpointOptions = [...endpointMap.entries()].map(([value, count]) => ({ value, count }));
+
+    const selectedEndpoint = ($('fEndpoint').value || '').trim();
+    if (selectedEndpoint) {
+      const valid = endpointOptions.some(o => o.value === selectedEndpoint);
+      if (!valid) {
+        $('fEndpoint').value = '';
+        endpointAC?.close();
+      }
+    }
+  }
+
   async function loadAutocompleteOptions() {
     const range = $('range').value;
     const rows = await (await fetch(`/api/traces?range=${range}&limit=1000`)).json();
+    optionTraceRows = rows;
+
     const modelMap = new Map();
-    const endpointMap = new Map();
     for (const r of rows) {
-      modelMap.set(r.model, (modelMap.get(r.model) || 0) + 1);
-      endpointMap.set(r.endpoint, (endpointMap.get(r.endpoint) || 0) + 1);
+      const m = r.model;
+      if (!m) continue;
+      modelMap.set(m, (modelMap.get(m) || 0) + 1);
     }
     modelOptions = [...modelMap.entries()].map(([value, count]) => ({ value, count }));
-    endpointOptions = [...endpointMap.entries()].map(([value, count]) => ({ value, count }));
+
+    recomputeEndpointOptionsByModel();
   }
 
   function clearFilters() {
@@ -557,6 +585,7 @@
     $('fEndpoint').value = '';
     $('fStatus').value = '';
     $('fErr').value = '';
+    recomputeEndpointOptionsByModel();
     modelAC?.close();
     endpointAC?.close();
     loadTraces();
@@ -668,6 +697,15 @@
   generateSnippets();
   modelAC = new AutocompleteInput($('fModel'), $('fModelMenu'), () => modelOptions);
   endpointAC = new AutocompleteInput($('fEndpoint'), $('fEndpointMenu'), () => endpointOptions);
+
+  $('fModel').addEventListener('input', () => {
+    recomputeEndpointOptionsByModel();
+    if (document.activeElement === $('fEndpoint')) endpointAC?.render($('fEndpoint').value || '');
+  });
+  $('fModel').addEventListener('change', () => {
+    recomputeEndpointOptionsByModel();
+  });
+
   loadAll();
 </script>
 </body>
