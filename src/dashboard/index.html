@@ -348,10 +348,11 @@
   }
 
   class AutocompleteInput {
-    constructor(inputEl, menuEl, getOptions) {
+    constructor(inputEl, menuEl, getOptions, onValueChange) {
       this.inputEl = inputEl;
       this.menuEl = menuEl;
       this.getOptions = getOptions;
+      this.onValueChange = onValueChange;
       this.items = [];
       this.activeIndex = -1;
       this.bind();
@@ -359,7 +360,10 @@
 
     bind() {
       this.inputEl.addEventListener('focus', () => this.render(this.inputEl.value));
-      this.inputEl.addEventListener('input', () => this.render(this.inputEl.value));
+      this.inputEl.addEventListener('input', () => {
+        this.onValueChange?.(this.inputEl.value);
+        this.render(this.inputEl.value);
+      });
       this.inputEl.addEventListener('keydown', (e) => {
         if (this.menuEl.style.display !== 'block') return;
         if (e.key === 'ArrowDown') { e.preventDefault(); this.move(1); }
@@ -387,6 +391,7 @@
 
     select(value) {
       this.inputEl.value = value;
+      this.onValueChange?.(value);
       this.close();
     }
 
@@ -543,7 +548,7 @@
   function recomputeEndpointOptionsByModel() {
     const normalizedModel = ($('fModel').value || '').trim().toLowerCase();
     const relevantRows = normalizedModel
-      ? optionTraceRows.filter(r => String(r.model || '').toLowerCase() === normalizedModel)
+      ? optionTraceRows.filter(r => String(r.model || '').trim().toLowerCase() === normalizedModel)
       : optionTraceRows;
 
     const endpointMap = new Map();
@@ -562,6 +567,18 @@
         endpointAC?.close();
       }
     }
+
+    // Ensure endpoint autocomplete never serves stale options.
+    if (document.activeElement === $('fEndpoint') || $('fEndpointMenu').style.display === 'block') {
+      endpointAC?.render($('fEndpoint').value || '');
+    }
+
+    // Debug aid for model-dependent endpoint options.
+    console.debug('[PromptTrace AC]', {
+      selectedModel: normalizedModel || '(all)',
+      matchingTraceCount: relevantRows.length,
+      endpointOptions: endpointOptions.map(x => x.value)
+    });
   }
 
   async function loadAutocompleteOptions() {
@@ -695,16 +712,18 @@
   }
 
   generateSnippets();
-  modelAC = new AutocompleteInput($('fModel'), $('fModelMenu'), () => modelOptions);
-  endpointAC = new AutocompleteInput($('fEndpoint'), $('fEndpointMenu'), () => endpointOptions);
-
-  $('fModel').addEventListener('input', () => {
-    recomputeEndpointOptionsByModel();
-    if (document.activeElement === $('fEndpoint')) endpointAC?.render($('fEndpoint').value || '');
-  });
-  $('fModel').addEventListener('change', () => {
-    recomputeEndpointOptionsByModel();
-  });
+  modelAC = new AutocompleteInput(
+    $('fModel'),
+    $('fModelMenu'),
+    () => modelOptions,
+    () => recomputeEndpointOptionsByModel()
+  );
+  endpointAC = new AutocompleteInput(
+    $('fEndpoint'),
+    $('fEndpointMenu'),
+    () => endpointOptions,
+    null
+  );
 
   loadAll();
 </script>
