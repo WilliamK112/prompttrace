@@ -328,7 +328,16 @@
   let modelCombo = null;
 
   const COMMON_PROVIDERS = ['openai','anthropic','gemini','groq','mistral','xai','deepseek','custom'];
-  const COMMON_MODELS = ['gpt-4o','gpt-4o-mini','gpt-4.1','gpt-4.1-mini','o3-mini','gemini-1.5-flash','gemini-1.5-pro','claude-3.5-sonnet','claude-3.7-sonnet','mistral-large','deepseek-chat','grok-2'];
+  const MODELS_BY_PROVIDER = {
+    openai: ['gpt-4o','gpt-4o-mini','gpt-4.1','gpt-4.1-mini','o3-mini'],
+    gemini: ['gemini-1.5-flash','gemini-1.5-pro','gemini-2.5-flash-image','gemini-2.5-pro'],
+    anthropic: ['claude-3.5-sonnet','claude-3.7-sonnet','claude-3-opus'],
+    deepseek: ['deepseek-chat','deepseek-reasoner'],
+    groq: ['llama-3.3-70b-versatile','mixtral-8x7b-32768'],
+    mistral: ['mistral-large','mistral-small-latest'],
+    xai: ['grok-2','grok-2-mini'],
+    custom: []
+  };
 
   function fmtUsd(v) {
     const n = Number(v || 0);
@@ -718,17 +727,46 @@
     });
   }
 
+  function normalizeProvider(v) {
+    const p = String(v || '').trim().toLowerCase();
+    if (!p) return '';
+    if (p.includes('openai')) return 'openai';
+    if (p.includes('gemini') || p.includes('google')) return 'gemini';
+    if (p.includes('anthropic') || p.includes('claude')) return 'anthropic';
+    if (p.includes('deepseek')) return 'deepseek';
+    if (p.includes('groq')) return 'groq';
+    if (p.includes('mistral')) return 'mistral';
+    if (p.includes('xai') || p.includes('grok')) return 'xai';
+    if (p.includes('custom')) return 'custom';
+    return p;
+  }
+
+  function inferProviderFromModel(model) {
+    const m = String(model || '').toLowerCase();
+    if (m.startsWith('gpt-') || m.startsWith('o3-') || m.startsWith('o1-')) return 'openai';
+    if (m.startsWith('gemini-')) return 'gemini';
+    if (m.startsWith('claude-')) return 'anthropic';
+    if (m.startsWith('deepseek-')) return 'deepseek';
+    if (m.startsWith('grok-')) return 'xai';
+    if (m.startsWith('mistral-')) return 'mistral';
+    return '';
+  }
+
   function buildUsedProviderModelOptions() {
     const providerMap = new Map();
     const modelMap = new Map();
     for (const r of optionTraceRows) {
-      const p = (r.provider || '').trim();
+      const pRaw = (r.provider || '').trim();
+      const p = normalizeProvider(pRaw);
       const m = (r.model || '').trim();
-      if (p) providerMap.set(p, (providerMap.get(p) || 0) + 1);
-      if (m) modelMap.set(m, (modelMap.get(m) || 0) + 1);
+      if (pRaw) providerMap.set(pRaw, (providerMap.get(pRaw) || 0) + 1);
+      if (m) {
+        const inferredProvider = p || inferProviderFromModel(m) || 'custom';
+        modelMap.set(m, { count: (modelMap.get(m)?.count || 0) + 1, provider: inferredProvider });
+      }
     }
     usedProviders = [...providerMap.entries()].map(([value, count]) => ({ value, count })).sort((a,b)=>b.count-a.count || a.value.localeCompare(b.value));
-    usedModels = [...modelMap.entries()].map(([value, count]) => ({ value, count })).sort((a,b)=>b.count-a.count || a.value.localeCompare(b.value));
+    usedModels = [...modelMap.entries()].map(([value, meta]) => ({ value, count: meta.count, provider: meta.provider })).sort((a,b)=>b.count-a.count || a.value.localeCompare(b.value));
   }
 
   function buildGroupedSuggestions(query, commonList, usedList) {
@@ -895,6 +933,37 @@
     $('updatedAt').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
   }
 
+  function getProviderBoundModelGroups(query) {
+    const provider = normalizeProvider($('wProvider').value);
+    const commonForProvider = provider ? (MODELS_BY_PROVIDER[provider] || []) : [];
+    const usedForProvider = provider
+      ? usedModels.filter(m => normalizeProvider(m.provider || inferProviderFromModel(m.value)) === provider)
+      : [];
+
+    if (!provider) {
+      const commonFallback = ['gpt-4o-mini','gemini-1.5-flash','claude-3.7-sonnet','deepseek-chat'];
+      return buildGroupedSuggestions(query, commonFallback, []).length
+        ? [{ label: 'Common', items: rankMatches(query, commonFallback.map(v => ({ value: v, count: 1 }))).slice(0,5) }, { label: 'Custom', items: (query||'').trim() ? [{ value: (query||'').trim() }] : [] }].filter(g=>g.items.length)
+        : [];
+    }
+
+    return buildGroupedSuggestions(query, commonForProvider, usedForProvider);
+  }
+
+  function validateModelAgainstProvider() {
+    const provider = normalizeProvider($('wProvider').value);
+    const model = ($('wModel').value || '').trim();
+    if (!provider || !model) return;
+    const validCommon = (MODELS_BY_PROVIDER[provider] || []).some(m => m.toLowerCase() === model.toLowerCase());
+    const inferred = normalizeProvider(inferProviderFromModel(model));
+    const validUsed = usedModels.some(m => m.value.toLowerCase() === model.toLowerCase() && normalizeProvider(m.provider || inferProviderFromModel(m.value)) === provider);
+    if (!(validCommon || validUsed || inferred === provider || provider === 'custom')) {
+      $('wModel').value = '';
+      modelCombo?.close();
+      console.debug('[PromptTrace QuickAdd] model cleared due to provider mismatch', { provider, model });
+    }
+  }
+
   $('wProvider').value = 'openai';
   $('wModel').value = 'gpt-4o-mini';
 
@@ -906,7 +975,7 @@
   modelCombo = new GroupedCombobox(
     $('wModel'),
     $('wModelMenu'),
-    (q) => buildGroupedSuggestions(q, COMMON_MODELS, usedModels)
+    (q) => getProviderBoundModelGroups(q)
   );
 
   $('fFailureSearch')?.addEventListener('input', () => loadFailures());
@@ -924,6 +993,15 @@
     () => endpointOptions,
     null
   );
+
+  $('wProvider').addEventListener('input', () => {
+    validateModelAgainstProvider();
+    if (document.activeElement === $('wModel')) modelCombo?.render($('wModel').value || '');
+  });
+  $('wProvider').addEventListener('change', () => {
+    validateModelAgainstProvider();
+    if (document.activeElement === $('wModel')) modelCombo?.render($('wModel').value || '');
+  });
 
   loadAll();
 </script>
