@@ -121,6 +121,18 @@
     .failure-list { display: grid; gap: 10px; }
     .failure-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--panel-2); }
     .failure-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .failures-scroll {
+      max-height: 215px; /* ~2 cards visible */
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0d1628;
+      padding: 10px;
+    }
+    .failures-scroll::-webkit-scrollbar { width: 10px; }
+    .failures-scroll::-webkit-scrollbar-track { background: #0b1324; border-radius: 10px; }
+    .failures-scroll::-webkit-scrollbar-thumb { background: #263754; border-radius: 10px; }
+    .failures-scroll::-webkit-scrollbar-thumb:hover { background: #32466b; }
 
     .detail {
       margin-top: 10px;
@@ -232,8 +244,13 @@
     <h2>Failures</h2>
     <div class="summary-grid" id="failureCards"></div>
     <div class="card">
-      <div id="failureList" class="failure-list"></div>
-      <div id="failureEmpty" class="small" style="display:none;">No failures detected in selected range.</div>
+      <div style="margin-bottom:10px;display:flex;gap:8px;">
+        <input id="fFailureSearch" placeholder="Search failures (endpoint/model/error/message)" style="width:100%;" />
+      </div>
+      <div class="failures-scroll">
+        <div id="failureList" class="failure-list"></div>
+        <div id="failureEmpty" class="small" style="display:none;">No failures detected in selected range/search.</div>
+      </div>
       <details style="margin-top:10px"><summary>Developer raw failures JSON</summary><pre id="failuresRaw"></pre></details>
     </div>
   </div>
@@ -798,8 +815,13 @@
     `;
 
     const list = f.recentFailures || [];
-    $('failureEmpty').style.display = list.length ? 'none' : 'block';
-    $('failureList').innerHTML = list.map(x => {
+    const q = ($('fFailureSearch')?.value || '').trim().toLowerCase();
+    const filtered = q
+      ? list.filter(x => [x.endpoint, x.model, x.error_category, x.error_message_preview].map(v => String(v || '').toLowerCase()).join(' ').includes(q))
+      : list;
+
+    $('failureEmpty').style.display = filtered.length ? 'none' : 'block';
+    $('failureList').innerHTML = filtered.map(x => {
       const summary = `${x.endpoint} on ${x.model} failed with ${x.error_category || 'unknown'} after ${x.retries?.count || 0} retries.`;
       return `<div class="failure-item">
         <div class="failure-top">
@@ -886,6 +908,8 @@
     $('wModelMenu'),
     (q) => buildGroupedSuggestions(q, COMMON_MODELS, usedModels)
   );
+
+  $('fFailureSearch')?.addEventListener('input', () => loadFailures());
 
   generateSnippets();
   modelAC = new AutocompleteInput(
