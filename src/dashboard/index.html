@@ -86,6 +86,7 @@
     .ac-item:last-child { border-bottom: none; }
     .ac-item:hover, .ac-item.active { background: #17233a; }
     .ac-empty { color: var(--muted); }
+    .ac-group { padding: 6px 10px; font-size: 11px; color: var(--muted); background: #0c1426; border-bottom: 1px solid rgba(43,58,85,.55); }
     .hl { color: #bfdbfe; font-weight: 700; }
 
     table { width: 100%; border-collapse: collapse; }
@@ -230,10 +231,24 @@
     <div class="card">
       <p class="muted" style="margin-top:0">Paste your API details and copy a ready tracking snippet.</p>
       <div class="quick-grid">
-        <label>Provider<br/><input id="wProvider" value="openai" /></label>
-        <label>Model<br/><input id="wModel" value="gpt-4o-mini" /></label>
-        <label>Endpoint name<br/><input id="wEndpoint" value="chat.reply" /></label>
-        <label>API URL<br/><input id="wUrl" value="https://api.openai.com/v1/chat/completions" /></label>
+        <label>Provider<br/>
+          <div class="ac-wrap">
+            <input id="wProvider" class="ac-input" placeholder="Search or type provider" autocomplete="off" />
+            <div id="wProviderMenu" class="ac-menu"></div>
+          </div>
+        </label>
+        <label>Model<br/>
+          <div class="ac-wrap">
+            <input id="wModel" class="ac-input" placeholder="Search or type model" autocomplete="off" />
+            <div id="wModelMenu" class="ac-menu"></div>
+          </div>
+        </label>
+        <label>Endpoint name<br/><input id="wEndpoint" value="chat.reply" />
+          <div class="small" style="margin-top:6px;">Use semantic endpoint names in the form <code>domain.action.variant</code>, not raw API URLs.</div>
+        </label>
+        <label>API URL (optional)<br/><input id="wUrl" value="https://api.openai.com/v1/chat/completions" />
+          <div class="small" style="margin-top:6px;">Optional for tracking-only setup.</div>
+        </label>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="generateSnippets()">Generate snippet</button>
@@ -268,8 +283,15 @@
   let modelOptions = [];
   let endpointOptions = [];
   let optionTraceRows = [];
+  let usedProviders = [];
+  let usedModels = [];
   let modelAC = null;
   let endpointAC = null;
+  let providerCombo = null;
+  let modelCombo = null;
+
+  const COMMON_PROVIDERS = ['openai','anthropic','gemini','groq','mistral','xai','deepseek','custom'];
+  const COMMON_MODELS = ['gpt-4o','gpt-4o-mini','gpt-4.1','gpt-4.1-mini','o3-mini','gemini-1.5-flash','gemini-1.5-pro','claude-3.5-sonnet','claude-3.7-sonnet','mistral-large','deepseek-chat','grok-2'];
 
   function fmtUsd(v) {
     const n = Number(v || 0);
@@ -416,6 +438,84 @@
       this.items = rankMatches(query, opts);
       this.activeIndex = this.items.length ? 0 : -1;
       this.paint();
+    }
+
+    close() {
+      this.menuEl.style.display = 'none';
+      this.activeIndex = -1;
+    }
+  }
+
+  class GroupedCombobox {
+    constructor(inputEl, menuEl, getGroups) {
+      this.inputEl = inputEl;
+      this.menuEl = menuEl;
+      this.getGroups = getGroups;
+      this.items = [];
+      this.activeIndex = -1;
+      this.bind();
+    }
+
+    bind() {
+      this.inputEl.addEventListener('focus', () => this.render(this.inputEl.value));
+      this.inputEl.addEventListener('input', () => this.render(this.inputEl.value));
+      this.inputEl.addEventListener('keydown', (e) => {
+        if (this.menuEl.style.display !== 'block') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); this.move(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); this.move(-1); }
+        else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.activeIndex >= 0 && this.items[this.activeIndex]) this.select(this.items[this.activeIndex].value);
+          else this.select(this.inputEl.value.trim());
+        } else if (e.key === 'Escape') this.close();
+      });
+      document.addEventListener('click', (e) => {
+        if (!this.menuEl.contains(e.target) && e.target !== this.inputEl) this.close();
+      });
+    }
+
+    move(delta) {
+      if (!this.items.length) return;
+      this.activeIndex = (this.activeIndex + delta + this.items.length) % this.items.length;
+      this.paint(this.inputEl.value);
+    }
+
+    select(value) {
+      this.inputEl.value = value || this.inputEl.value;
+      this.close();
+    }
+
+    render(query) {
+      const groups = this.getGroups(query || '');
+      this.items = groups.flatMap(g => g.items || []);
+      this.activeIndex = this.items.length ? 0 : -1;
+      this.paint(query || '', groups);
+    }
+
+    paint(query, groups = this.getGroups(query || '')) {
+      const q = (query || '').trim();
+      if (!groups.length || !groups.some(g => g.items?.length)) {
+        this.menuEl.innerHTML = `<div class="ac-item ac-empty">No matches</div>`;
+        this.menuEl.style.display = 'block';
+        return;
+      }
+
+      let flatIdx = -1;
+      this.menuEl.innerHTML = groups.map((g) => {
+        if (!g.items?.length) return '';
+        const rows = g.items.map((x) => {
+          flatIdx += 1;
+          return `<div class="ac-item ${flatIdx === this.activeIndex ? 'active' : ''}" title="${escapeHtml(x.value)}" data-value="${escapeHtml(x.value)}">${highlightMatch(x.value, q)}</div>`;
+        }).join('');
+        return `<div class="ac-group">${escapeHtml(g.label)}</div>${rows}`;
+      }).join('');
+
+      [...this.menuEl.querySelectorAll('.ac-item')].forEach((el) => {
+        const v = el.getAttribute('data-value');
+        if (!v) return;
+        el.addEventListener('mousedown', (ev) => { ev.preventDefault(); this.select(v); });
+      });
+      this.menuEl.style.display = 'block';
     }
 
     close() {
@@ -581,6 +681,47 @@
     });
   }
 
+  function buildUsedProviderModelOptions() {
+    const providerMap = new Map();
+    const modelMap = new Map();
+    for (const r of optionTraceRows) {
+      const p = (r.provider || '').trim();
+      const m = (r.model || '').trim();
+      if (p) providerMap.set(p, (providerMap.get(p) || 0) + 1);
+      if (m) modelMap.set(m, (modelMap.get(m) || 0) + 1);
+    }
+    usedProviders = [...providerMap.entries()].map(([value, count]) => ({ value, count })).sort((a,b)=>b.count-a.count || a.value.localeCompare(b.value));
+    usedModels = [...modelMap.entries()].map(([value, count]) => ({ value, count })).sort((a,b)=>b.count-a.count || a.value.localeCompare(b.value));
+  }
+
+  function buildGroupedSuggestions(query, commonList, usedList) {
+    const commonRanked = rankMatches(query, commonList.map(v => ({ value: v, count: 1 })));
+    const usedRanked = rankMatches(query, usedList);
+    const typed = (query || '').trim();
+
+    const groups = [
+      { label: 'Common', items: commonRanked.slice(0, 5) },
+      { label: 'Already used in tracker', items: usedRanked.slice(0, 5) }
+    ];
+
+    if (typed) {
+      const exists = [...commonList, ...usedList.map(x=>x.value)].some(v => String(v).toLowerCase() === typed.toLowerCase());
+      if (!exists) groups.push({ label: 'Custom', items: [{ value: `Use "${typed}"`, raw: typed }] });
+      else groups.push({ label: 'Custom', items: [{ value: typed }] });
+    } else {
+      groups.push({ label: 'Custom', items: [{ value: 'Use custom value' }] });
+    }
+
+    return groups.map(g => ({
+      ...g,
+      items: (g.items || []).map(it => {
+        if (it.raw) return { value: it.raw };
+        if (it.value === 'Use custom value') return { value: '' };
+        return { value: it.value };
+      }).filter(x => x.value !== '')
+    })).filter(g => g.items.length);
+  }
+
   async function loadAutocompleteOptions() {
     const range = $('range').value;
     const rows = await (await fetch(`/api/traces?range=${range}&limit=1000`)).json();
@@ -594,6 +735,7 @@
     }
     modelOptions = [...modelMap.entries()].map(([value, count]) => ({ value, count }));
 
+    buildUsedProviderModelOptions();
     recomputeEndpointOptionsByModel();
   }
 
@@ -710,6 +852,20 @@
     await loadTraces();
     $('updatedAt').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
   }
+
+  $('wProvider').value = 'openai';
+  $('wModel').value = 'gpt-4o-mini';
+
+  providerCombo = new GroupedCombobox(
+    $('wProvider'),
+    $('wProviderMenu'),
+    (q) => buildGroupedSuggestions(q, COMMON_PROVIDERS, usedProviders)
+  );
+  modelCombo = new GroupedCombobox(
+    $('wModel'),
+    $('wModelMenu'),
+    (q) => buildGroupedSuggestions(q, COMMON_MODELS, usedModels)
+  );
 
   generateSnippets();
   modelAC = new AutocompleteInput(
