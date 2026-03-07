@@ -92,6 +92,24 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; font-size: 12px; }
     th { color: var(--muted); font-weight: 600; }
+    .traces-scroll {
+      max-height: 405px; /* ~10 rows visual height */
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0d1628;
+    }
+    .traces-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #0f172a;
+      box-shadow: inset 0 -1px 0 rgba(43,58,85,.9);
+    }
+    .traces-scroll::-webkit-scrollbar { width: 10px; }
+    .traces-scroll::-webkit-scrollbar-track { background: #0b1324; border-radius: 10px; }
+    .traces-scroll::-webkit-scrollbar-thumb { background: #263754; border-radius: 10px; }
+    .traces-scroll::-webkit-scrollbar-thumb:hover { background: #32466b; }
     td.num, th.num { text-align: right; }
     tr.clickable:hover { background: #0d172a; cursor: pointer; }
 
@@ -199,10 +217,12 @@
         <button class="ghost" onclick="clearFilters()">Clear</button>
         <button class="primary" onclick="loadTraces()">Apply</button>
       </div>
-      <table>
-        <thead><tr><th class="th-sort" onclick="setSort('timestamp_start')">time</th><th class="th-sort" onclick="setSort('endpoint')">endpoint</th><th>model</th><th class="num th-sort" onclick="setSort('latency_ms')">latency</th><th class="num th-sort" onclick="setSort('total_tokens')">tokens</th><th class="num th-sort" onclick="setSort('estimated_cost_usd')">cost</th><th class="th-sort" onclick="setSort('status')">status</th></tr></thead>
-        <tbody id="traceRows"></tbody>
-      </table>
+      <div class="traces-scroll">
+        <table>
+          <thead><tr><th class="th-sort" onclick="setSort('timestamp_start')">time</th><th class="th-sort" onclick="setSort('endpoint')">endpoint</th><th>model</th><th class="num th-sort" onclick="setSort('latency_ms')">latency</th><th class="num th-sort" onclick="setSort('total_tokens')">tokens</th><th class="num th-sort" onclick="setSort('estimated_cost_usd')">cost</th><th class="th-sort" onclick="setSort('status')">status</th></tr></thead>
+          <tbody id="traceRows"></tbody>
+        </table>
+      </div>
       <div id="traceEmpty" class="small" style="margin-top:8px;display:none;">No traces in selected range/filter.</div>
       <div id="traceDetail" class="detail" style="display:none"></div>
     </div>
