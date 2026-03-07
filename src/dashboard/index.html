@@ -289,9 +289,11 @@
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="generateSnippets()">Generate snippet</button>
+        <button onclick="saveTrackerConfig()">Save tracker config</button>
         <button onclick="copySnippet('browserSnippet')">Copy Browser</button>
         <button onclick="copySnippet('nodeSnippet')">Copy Node</button>
       </div>
+      <div id="savedConfigs" class="small" style="margin-top:8px;"></div>
       <div style="height:10px"></div>
       <div class="tabs">
         <div id="tabBrowser" class="tab active" onclick="setTab('browser')">Browser</div>
@@ -322,6 +324,8 @@
   let optionTraceRows = [];
   let usedProviders = [];
   let usedModels = [];
+  const QUICKADD_STATE_KEY = 'prompttrace.quickadd.state.v1';
+  const QUICKADD_CONFIGS_KEY = 'prompttrace.quickadd.configs.v1';
   let modelAC = null;
   let endpointAC = null;
   let providerCombo = null;
@@ -888,6 +892,73 @@
     $('openclawRaw').textContent = JSON.stringify(o, null, 2);
   }
 
+  function saveQuickAddState() {
+    const state = {
+      provider: $('wProvider').value || '',
+      model: $('wModel').value || '',
+      endpoint: $('wEndpoint').value || '',
+      url: $('wUrl').value || ''
+    };
+    localStorage.setItem(QUICKADD_STATE_KEY, JSON.stringify(state));
+  }
+
+  function restoreQuickAddState() {
+    try {
+      const raw = localStorage.getItem(QUICKADD_STATE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.provider) $('wProvider').value = s.provider;
+      if (s.model) $('wModel').value = s.model;
+      if (s.endpoint) $('wEndpoint').value = s.endpoint;
+      if (s.url) $('wUrl').value = s.url;
+    } catch {}
+  }
+
+  function loadSavedConfigs() {
+    try { return JSON.parse(localStorage.getItem(QUICKADD_CONFIGS_KEY) || '[]'); } catch { return []; }
+  }
+
+  function renderSavedConfigs() {
+    const cfgs = loadSavedConfigs();
+    if (!cfgs.length) {
+      $('savedConfigs').innerHTML = 'No saved tracker configs yet.';
+      return;
+    }
+    $('savedConfigs').innerHTML = cfgs.map((c, i) => `<span style="display:inline-flex;gap:6px;align-items:center;margin-right:8px;margin-top:6px;padding:4px 8px;border:1px solid #2b3a55;border-radius:999px;">${escapeHtml(c.provider)} / ${escapeHtml(c.model)} / ${escapeHtml(c.endpoint)} <button onclick="applyTrackerConfig(${i})" style="padding:2px 6px;">Use</button></span>`).join('');
+  }
+
+  function saveTrackerConfig() {
+    const c = {
+      provider: ($('wProvider').value || '').trim(),
+      model: ($('wModel').value || '').trim(),
+      endpoint: ($('wEndpoint').value || '').trim(),
+      url: ($('wUrl').value || '').trim()
+    };
+    if (!c.provider || !c.model || !c.endpoint) {
+      alert('Please fill Provider, Model, and Endpoint first.');
+      return;
+    }
+    const cfgs = loadSavedConfigs();
+    const exists = cfgs.findIndex(x => x.provider===c.provider && x.model===c.model && x.endpoint===c.endpoint);
+    if (exists >= 0) cfgs[exists] = c; else cfgs.unshift(c);
+    localStorage.setItem(QUICKADD_CONFIGS_KEY, JSON.stringify(cfgs.slice(0, 20)));
+    saveQuickAddState();
+    renderSavedConfigs();
+    alert('Tracker config saved. It will persist after reload.');
+  }
+
+  function applyTrackerConfig(i) {
+    const cfgs = loadSavedConfigs();
+    const c = cfgs[i];
+    if (!c) return;
+    $('wProvider').value = c.provider || '';
+    $('wModel').value = c.model || '';
+    $('wEndpoint').value = c.endpoint || '';
+    $('wUrl').value = c.url || '';
+    generateSnippets();
+    saveQuickAddState();
+  }
+
   function generateSnippets() {
     const provider = $('wProvider').value || 'custom';
     const model = $('wModel').value || 'unknown-model';
@@ -900,6 +971,7 @@
 
     $('browserSnippet').textContent = browser;
     $('nodeSnippet').textContent = node;
+    saveQuickAddState();
   }
 
   async function copySnippet(id) {
@@ -966,6 +1038,7 @@
 
   $('wProvider').value = 'openai';
   $('wModel').value = 'gpt-4o-mini';
+  restoreQuickAddState();
 
   providerCombo = new GroupedCombobox(
     $('wProvider'),
@@ -979,8 +1052,13 @@
   );
 
   $('fFailureSearch')?.addEventListener('input', () => loadFailures());
+  ['wProvider','wModel','wEndpoint','wUrl'].forEach(id => {
+    $(id).addEventListener('input', saveQuickAddState);
+    $(id).addEventListener('change', saveQuickAddState);
+  });
 
   generateSnippets();
+  renderSavedConfigs();
   modelAC = new AutocompleteInput(
     $('fModel'),
     $('fModelMenu'),
