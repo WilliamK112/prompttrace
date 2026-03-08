@@ -35,6 +35,13 @@ bool IsSafeRelativePath(const std::filesystem::path& relative_path) {
   return true;
 }
 
+HttpResponse MakeError(int status_code, std::string status_text, std::string body) {
+  return HttpResponse{status_code,
+                      std::move(status_text),
+                      {{"Content-Type", "text/plain; charset=utf-8"}},
+                      std::move(body)};
+}
+
 }  // namespace
 
 StaticFileHandler::StaticFileHandler(std::string root_dir) : root_dir_(std::move(root_dir)) {}
@@ -54,10 +61,7 @@ HttpResponse StaticFileHandler::Serve(const std::string& request_path) const {
 
     fs::path relative = fs::path(local).lexically_normal();
     if (!IsSafeRelativePath(relative)) {
-      return HttpResponse{400,
-                          "Bad Request",
-                          {{"Content-Type", "text/plain; charset=utf-8"}},
-                          "400 Bad Request\n"};
+      return MakeError(400, "Bad Request", "400 Bad Request\n");
     }
 
     const fs::path base = fs::weakly_canonical(fs::path(root_dir_));
@@ -66,41 +70,50 @@ HttpResponse StaticFileHandler::Serve(const std::string& request_path) const {
     const std::string base_str = base.string();
     const std::string full_str = full_path.string();
     if (full_str.rfind(base_str, 0) != 0) {
-      return HttpResponse{400,
-                          "Bad Request",
-                          {{"Content-Type", "text/plain; charset=utf-8"}},
-                          "400 Bad Request\n"};
+      return MakeError(400, "Bad Request", "400 Bad Request\n");
     }
 
     if (!fs::exists(full_path) || fs::is_directory(full_path)) {
-      return HttpResponse{404,
-                          "Not Found",
-                          {{"Content-Type", "text/plain; charset=utf-8"}},
-                          "404 Not Found\n"};
+      return MakeError(404, "Not Found", "404 Not Found\n");
+    }
+
+    const std::string cache_key = full_path.string();
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      const auto it = cache_.find(cache_key);
+      if (it != cache_.end()) {
+        HttpResponse response;
+        response.status_code = 200;
+        response.status_text = "OK";
+        response.headers["Content-Type"] = it->second.content_type;
+        response.body = it->second.body;
+        return response;
+      }
     }
 
     std::ifstream file(full_path, std::ios::binary);
     if (!file) {
-      return HttpResponse{500,
-                          "Internal Server Error",
-                          {{"Content-Type", "text/plain; charset=utf-8"}},
-                          "500 Internal Server Error\n"};
+      return MakeError(500, "Internal Server Error", "500 Internal Server Error\n");
     }
 
     std::ostringstream buffer;
     buffer << file.rdbuf();
 
+    CachedFile cached{GetMimeType(full_path), buffer.str()};
+
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      cache_[cache_key] = cached;
+    }
+
     HttpResponse response;
     response.status_code = 200;
     response.status_text = "OK";
-    response.body = buffer.str();
-    response.headers["Content-Type"] = GetMimeType(full_path);
+    response.body = std::move(cached.body);
+    response.headers["Content-Type"] = std::move(cached.content_type);
     return response;
   } catch (...) {
-    return HttpResponse{500,
-                        "Internal Server Error",
-                        {{"Content-Type", "text/plain; charset=utf-8"}},
-                        "500 Internal Server Error\n"};
+    return MakeError(500, "Internal Server Error", "500 Internal Server Error\n");
   }
 }
 

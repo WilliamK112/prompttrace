@@ -16,7 +16,7 @@ This project starts from correctness and incrementally adds production-minded fe
 
 ---
 
-## Features
+## Feature List
 
 - HTTP/1.1 response formatting with status line, headers, and content length
 - Simple HTTP request parsing (request line + headers)
@@ -26,10 +26,11 @@ This project starts from correctness and incrementally adds production-minded fe
   - `GET /hello` → `Hello from C++ HTTP server`
 - 404 for unknown dynamic routes
 - 400 for malformed requests / unsupported methods in this minimal server
-- Fixed-size thread pool for concurrent client handling
+- 500 for unhandled internal exceptions
+- Fixed-size thread pool with a blocking task queue for concurrent client handling
 - Static file serving from `public/` using `/static/...`
 - Basic MIME support: `html`, `css`, `js`, `json`, `txt`
-- Path traversal protection (`../` blocked)
+- Path traversal protection (`../` blocked via normalized/canonical paths)
 - Request logging (client, method, path, status)
 - Configurable host/port/thread count/static dir via CLI flags
 - Benchmark + smoke test scripts
@@ -44,7 +45,7 @@ This project starts from correctness and incrementally adds production-minded fe
 - `ThreadPool`: worker threads consume queued connection-handling tasks
 - `HttpRequest` parser: parses raw bytes into method/path/version/headers/body
 - `Router`: path → handler map for dynamic routes
-- `StaticFileHandler`: serves files from static directory with safety checks
+- `StaticFileHandler`: serves files from static directory with safety checks + in-memory hot-file cache
 - `HttpResponse`: serializes to wire-format HTTP/1.1 response
 - `Logger`: structured console logging
 - `Config`: command-line config parsing
@@ -141,7 +142,6 @@ curl -i http://127.0.0.1:8080/static/data.json
 
 # error paths
 curl -i http://127.0.0.1:8080/does-not-exist
-curl -i http://127.0.0.1:8080/static/../../etc/passwd
 curl -i -X POST http://127.0.0.1:8080/hello
 ```
 
@@ -154,7 +154,7 @@ curl -i -X POST http://127.0.0.1:8080/hello
 ```bash
 ./benchmarks/smoke_test.sh
 ./benchmarks/run_bench.sh
-# or a custom URL
+# custom URL
 ./benchmarks/run_bench.sh http://127.0.0.1:9090
 ```
 
@@ -165,39 +165,40 @@ curl -i -X POST http://127.0.0.1:8080/hello
 2. `ab`
 3. `curl` fallback loops
 
-### Benchmark results
+### Latest sample run (this repo, local machine)
 
-Results are written to `benchmarks/results/bench-<timestamp>.txt`.
+Using `ab -n 5000 -c 100`:
 
-Sample run in this environment (using `ab -n 5000 -c 100`):
+- `/`: Requests/sec = `32857.99`, mean latency = `3.043 ms`
+- `/hello`: Requests/sec = `37246.72`, mean latency = `2.685 ms`
+- `/health`: Requests/sec = `41801.83`, mean latency = `2.392 ms`
+- `/static/index.html`: Requests/sec = `37320.95`, mean latency = `2.679 ms`
 
-- `/`: Requests/sec = `36,475`, Mean latency = `2.742 ms`
-- `/hello`: Requests/sec = `43,180`, Mean latency = `2.316 ms`
-- `/health`: Requests/sec = `42,430`, Mean latency = `2.357 ms`
-- `/static/index.html`: Requests/sec = `35,538`, Mean latency = `2.814 ms`
+Saved output:
+`benchmarks/results/bench-20260308-043642.txt`
 
-Reference output file:
-`benchmarks/results/bench-20260308-043314.txt`
+> Numbers are hardware/OS dependent; rerun locally for your final metrics.
 
-> These are machine-dependent; rerun locally for your own final numbers.
+### Likely bottlenecks
 
----
+- One request per TCP connection (`Connection: close`): extra connection setup/teardown overhead.
+- Parsing and response generation done per request with minimal reuse.
+- Thread contention under very high concurrency (socket accept + queue + logging lock).
 
-## Optimizations Applied (Measured/Practical)
+### Improvements made based on measurement
 
-- Added thread pool so accept loop stays responsive while workers process requests.
-- Increased listen backlog (`128`) to better tolerate bursty clients.
-- Avoided repeated small socket writes by building one HTTP response string and using `SendAll`.
-- Reserved request buffer upfront to reduce allocation churn for common request sizes.
-- Static file handler uses direct file streaming and simple extension lookup map.
+- Kept accept path light and pushed request work to worker threads via task queue.
+- Added a small in-memory static-file cache to reduce repeated disk I/O for hot assets.
+- Added mutex-protected logger output to avoid interleaved lines under concurrent load.
 
 ---
 
 ## Future Improvements
 
-- Keep-alive + multiple requests per connection (deferred intentionally)
+- Keep-alive + multiple requests per connection (**intentionally deferred** for design simplicity)
 - Better HTTP compliance (more methods, robust header parsing, chunked transfer)
 - Connection/read timeouts and max request body handling
+- Config file + env var support in addition to CLI flags
 - Metrics endpoint and structured JSON logs
 - TLS (via reverse proxy or direct integration)
 
@@ -205,17 +206,17 @@ Reference output file:
 
 ## Lessons Learned
 
-- Concurrency can stay simple when responsibilities are explicit: accept thread + worker pool.
-- Correctness first (parsing, status codes, safety checks) keeps later optimization straightforward.
-- A small modular design is easier to explain than a highly abstract one in interviews.
+- Concurrency stays approachable when responsibilities are explicit: accept thread + worker pool.
+- Correctness first (parsing, status codes, safety checks) makes later optimization straightforward.
+- Benchmark scripts are essential to keep performance claims grounded.
 
 ---
 
 ## Resume Bullet Points (3)
 
-- Built a modular **multithreaded HTTP server in C++17** using POSIX sockets and CMake, implementing request parsing, routing, and RFC-style HTTP/1.1 response serialization.
-- Designed and integrated a **fixed-size thread pool + task queue** to process concurrent client connections safely with `std::mutex` and `std::condition_variable`.
-- Implemented **secure static file serving** (MIME mapping + path traversal protection), structured request logging, and reproducible load-testing workflows (`wrk`/`ab`/`curl`).
+- Built a modular **multithreaded HTTP server in C++17** using POSIX sockets and CMake, implementing request parsing, routing, and HTTP/1.1 response serialization.
+- Designed and integrated a **fixed-size thread pool + blocking task queue** to process concurrent client connections safely with `std::mutex` and `std::condition_variable`.
+- Implemented **secure static file serving** (MIME mapping + traversal protection), structured request logging, and reproducible load-testing workflows (`wrk`/`ab`/`curl`).
 
 ---
 
@@ -223,12 +224,12 @@ Reference output file:
 
 ### 30-second version
 
-“I built a C++17 HTTP server from scratch with clean modules for server lifecycle, request parsing, routing, and response formatting. After validating correctness in a single-threaded version, I added a fixed-size thread pool so the accept loop can dispatch client sockets and handle requests concurrently. I also added secure static file serving, request logging, and benchmark scripts, so it’s not just a toy server—it’s measurable and interview-ready.”
+“I built a C++17 HTTP server from scratch with clean modules for socket lifecycle, request parsing, routing, and response formatting. After validating correctness, I added a fixed-size thread pool and task queue so the accept loop can dispatch sockets while workers process requests concurrently. I also implemented secure static file serving, request logging, and benchmark scripts, so it’s practical and measurable—not just a toy server.”
 
 ### 90-second version
 
-“This project is a from-scratch HTTP server in modern C++ with a strong focus on clear architecture. The `Server` owns socket setup (`socket/bind/listen/accept`) and pushes accepted connections into a fixed-size `ThreadPool`. Worker threads parse HTTP requests, route dynamic paths like `/`, `/health`, and `/hello`, or serve files from `public/` via `/static/...`.
+“This project is a from-scratch HTTP server in modern C++ with a focus on clear architecture and practical tradeoffs. The `Server` handles socket setup (`socket/bind/listen/accept`) and pushes accepted connections into a fixed-size `ThreadPool`. Worker threads parse requests, route dynamic endpoints (`/`, `/health`, `/hello`), or serve static content from `public/` through `/static/...`.
 
-I split concerns into small modules: `HttpRequest` parsing, `HttpResponse` serialization, `Router`, `StaticFileHandler`, `Logger`, and `Config`. That keeps the code easy to reason about and easy to discuss in interviews. For practical robustness, I return appropriate status codes for malformed requests and unknown routes, log method/path/status/client, and block path traversal attempts in static file paths.
+I separated concerns into small modules: `HttpRequest`, `HttpResponse`, `Router`, `ThreadPool`, `StaticFileHandler`, `Logger`, and `Config`. That keeps the implementation easy to reason about and easy to explain in interviews. On correctness and safety, the server returns 400 for malformed requests, 404 for missing routes/files, and blocks path traversal attempts for static files.
 
-I also added benchmarking scripts that use `wrk` or `ab` with a curl fallback, so performance discussions are based on reproducible runs rather than guesses. Keep-alive and deeper HTTP compliance are intentionally deferred to keep the implementation clean and focused for this version.”
+For performance, I added benchmark automation with `wrk`/`ab`/`curl` fallback and used those runs to guide improvements. One concrete change was adding a small static-file cache to reduce repeated disk reads under load. Keep-alive and deeper HTTP compliance are intentionally deferred so this version stays clean and interview-friendly while still demonstrating concurrency, security basics, and measurement-driven optimization.”

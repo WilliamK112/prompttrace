@@ -21,11 +21,21 @@ class ThreadPool {
   bool Enqueue(std::function<void()> task);
 
  private:
+  class TaskQueue {
+   public:
+    bool Push(std::function<void()> task);
+    bool Pop(std::function<void()>* out_task);
+    void Stop();
+
+   private:
+    std::queue<std::function<void()>> tasks_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    bool stopping_{false};
+  };
+
   std::vector<std::thread> workers_;
-  std::queue<std::function<void()>> tasks_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
-  bool stopping_{false};
+  TaskQueue queue_;
 };
 
 }  // namespace http

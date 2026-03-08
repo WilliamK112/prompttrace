@@ -18,7 +18,15 @@ cd cpp-http-server
 ./benchmarks/run_bench.sh http://127.0.0.1:9090
 ```
 
+## What gets tested
+
+- `/`
+- `/hello`
+- `/health`
+- `/static/index.html`
+
 ## Notes
 
 - If `wrk` and `ab` are unavailable, the script still runs a curl-based fallback.
-- Use local runs for real numbers on your machine.
+- Results vary by machine/OS; compare changes on the same host when possible.
+- Use output under `benchmarks/results/` as your reproducible benchmark artifact.
