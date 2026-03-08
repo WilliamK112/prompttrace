@@ -1,8 +1,8 @@
 # PromptTrace
 
-![After the code](assets/screenshots/01-after-code.png)
-![Screenshot 2](assets/screenshots/02-screenshot.png)
-![Screenshot 3](assets/screenshots/03-screenshot.png)
+![After the code](assets/screenshots/1.png)
+![Screenshot 2](assets/screenshots/2.png)
+![Screenshot 3](assets/screenshots/3.png)
 
 A structured personal AI workspace for running **OpenClaw** with memory, persona, and operational guardrails.
 
@@ -60,9 +60,9 @@ Before publishing publicly, add a `.gitignore` and remove machine-specific/priva
 
 Add your screenshots to `assets/screenshots/` with these filenames so they render directly under the title:
 
-- `01-after-code.png`
-- `02-screenshot.png`
-- `03-screenshot.png`
+- `1.png`
+- `2.png`
+- `3.png`
 
 ## License
 
