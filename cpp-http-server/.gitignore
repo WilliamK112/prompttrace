@@ -11,4 +11,5 @@ cmake-build-*/
 .DS_Store
 
 # Benchmark artifacts
-benchmarks/results/
+benchmarks/results/*
+!benchmarks/results/.gitkeep

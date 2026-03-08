@@ -1,6 +1,24 @@
 # Benchmarks
 
-Phase 5 will add:
-- Benchmark scripts (`ab`, `wrk`, or `curl` loops)
-- Output collection under `benchmarks/results/`
-- Throughput/latency summary in project README
+This folder contains lightweight scripts for functional smoke tests and basic load testing.
+
+## Files
+
+- `smoke_test.sh`: quick endpoint verification
+- `run_bench.sh`: throughput/latency benchmark (`wrk` preferred, `ab` fallback, then `curl`)
+- `results/`: benchmark output files
+
+## Usage
+
+```bash
+cd cpp-http-server
+./benchmarks/smoke_test.sh
+./benchmarks/run_bench.sh
+# custom base URL
+./benchmarks/run_bench.sh http://127.0.0.1:9090
+```
+
+## Notes
+
+- If `wrk` and `ab` are unavailable, the script still runs a curl-based fallback.
+- Use local runs for real numbers on your machine.

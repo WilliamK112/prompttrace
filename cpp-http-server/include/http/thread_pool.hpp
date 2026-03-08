@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <cstddef>
 #include <functional>
 #include <mutex>
 #include <queue>
@@ -14,7 +15,10 @@ class ThreadPool {
   explicit ThreadPool(std::size_t num_threads);
   ~ThreadPool();
 
-  void Enqueue(std::function<void()> task);
+  ThreadPool(const ThreadPool&) = delete;
+  ThreadPool& operator=(const ThreadPool&) = delete;
+
+  bool Enqueue(std::function<void()> task);
 
  private:
   std::vector<std::thread> workers_;
