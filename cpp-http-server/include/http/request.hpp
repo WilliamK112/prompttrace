@@ -13,4 +13,6 @@ struct HttpRequest {
   std::string body;
 };
 
+bool ParseHttpRequest(const std::string& raw_request, HttpRequest* out_request);
+
 }  // namespace http
