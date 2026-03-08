@@ -1,0 +1,14 @@
+# Build outputs
+build/
+cmake-build-*/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+
+# Benchmark artifacts
+benchmarks/results/
