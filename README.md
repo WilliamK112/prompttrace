@@ -2,6 +2,12 @@
 
 PromptTrace gives LLM apps a black-box recorder: every model call is traced and analyzed for cost, latency, and reliability.
 
+## Screenshots
+
+![PromptTrace Dashboard - Quick Add](assets/screenshots/1.png)
+![PromptTrace Dashboard - Traces](assets/screenshots/2.png)
+![PromptTrace Dashboard - Failures](assets/screenshots/3.png)
+
 ## ✅ MVP status (Day 1 → Day 7)
 
 - JSONL trace collector (`.prompttrace/traces.jsonl`)
