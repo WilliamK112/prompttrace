@@ -1,9 +1,5 @@
 # PromptTrace
 
-![After the code](assets/screenshots/1.png)
-![Screenshot 2](assets/screenshots/2.png)
-![Screenshot 3](assets/screenshots/3.png)
-
 A structured personal AI workspace for running **OpenClaw** with memory, persona, and operational guardrails.
 
 ## Overview
@@ -63,6 +59,10 @@ Add your screenshots to `assets/screenshots/` with these filenames so they rende
 - `1.png`
 - `2.png`
 - `3.png`
+
+![After the code](assets/screenshots/1.png)
+![Screenshot 2](assets/screenshots/2.png)
+![Screenshot 3](assets/screenshots/3.png)
 
 ## License
 
